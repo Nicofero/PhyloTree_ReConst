@@ -15,3 +15,10 @@ En la reunión le enseñé y expliqué el código para crear circuitos QAOA. Me 
 
 - Buscar el código del Paper, en caso de no encontrarlo intentar contactar con los autores a ver si me lo pueden facilitar.
 - Intentar hacer esto en el DA de Fujitsu, en el caso de que pueda conseguir acceso (poco probable).
+
+
+## Nuevas cosas
+
+- Mirar tema de los archivos FASTQ
+- Mirar para los arboles la libreria netwick de python
+- Leer las cosas de arboles filogeneticos que me mando
