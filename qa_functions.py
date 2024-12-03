@@ -3,11 +3,8 @@ import dimod
 from dimod import BinaryQuadraticModel, BINARY
 from typing import Optional
 from dwave.system import DWaveSampler, EmbeddingComposite
-from colorama import Fore
 import time
-import networkx as nx
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import random
 import re
 from treecmp import treecmp
@@ -15,9 +12,6 @@ from Bio import Align
 from Bio.Align import substitution_matrices
 from Bio import SeqIO
 import pandas as pd
-from Bio.Phylo.TreeConstruction import DistanceTreeConstructor
-from Bio import Phylo
-from Bio.Phylo.TreeConstruction import DistanceMatrix
 
 ############################################################################################################################
 
