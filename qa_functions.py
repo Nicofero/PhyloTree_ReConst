@@ -6,12 +6,13 @@ from dwave.system import DWaveSampler, EmbeddingComposite
 import time
 import matplotlib.pyplot as plt
 import random
+import sys
 import re
-from treecmp import treecmp
 from Bio import Align
 from Bio.Align import substitution_matrices
 from Bio import SeqIO
 import pandas as pd
+from ete3 import Tree
 
 ############################################################################################################################
 
@@ -189,7 +190,7 @@ class TreeNode:
             child_dx = dx / num_children
             child_x = x - dx / 2 + child_dx / 2
             for child in self.children:
-                self.calculate_positions(child, child_x, y - dy, child_dx, dy, positions, parent_positions, node_label)
+                child._calculate_positions(child_x, y - dy, child_dx, dy, positions, parent_positions, node_label)
                 child_x += child_dx
 
         return positions, parent_positions
@@ -533,3 +534,31 @@ def bf_tree(matrix,tags=[],**kwargs):
         node.children.append(leaf)
     
     return node
+
+# Compare trees
+def treecmp(tree1:Optional[str | Tree ],tree2:Optional[str | Tree ]):
+    """
+    Compare two input trees and returns the Robinson-Foulds distance between them
+    
+    Args:
+		`tree1` (Tree or Newick string): First tree.
+    	`tree2` (Tree or Newick string): Second tree.
+    
+    Returns:
+		The Robinson-Foulds distance between trees.
+  
+	Raises:
+		Exception.    
+    """
+    try:
+        if type(tree1) == str:
+            tree1 = Tree(tree1)
+        if type(tree2) == str:
+            tree2 = Tree(tree2)
+            
+        rf, max_parts = tree1.robinson_foulds(tree2, unrooted_trees=True)[:2]
+        accuracy = round((1 - (rf / max_parts)) * 100, 2)
+        return accuracy
+        
+    except Exception as e:
+        print(str(e), file=sys.stderr)
