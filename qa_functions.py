@@ -562,3 +562,52 @@ def treecmp(tree1:Optional[str | Tree ],tree2:Optional[str | Tree ]):
         
     except Exception as e:
         print(str(e), file=sys.stderr)
+        
+        
+####################################################################################
+#                                                                                  #
+#             __  __ _              _                                              #
+#            |  \/  (_)___  ___ ___| | __ _ _ __   ___  ___  _   _ ___             #
+#            | |\/| | / __|/ __/ _ \ |/ _` | '_ \ / _ \/ _ \| | | / __|            #
+#            | |  | | \__ \ (_|  __/ | (_| | | | |  __/ (_) | |_| \__ \            #
+#            |_|  |_|_|___/\___\___|_|\__,_|_| |_|\___|\___/ \__,_|___/            #
+#                                                                                  #
+####################################################################################
+
+def slice_alignment(file,number,new_name=""):
+    """Slices alignment of size N to size number, and creates a new phylip file to save it.
+    
+    Args:
+        `file` (str): Name of the file where the alignment is located.
+        `number` (int): Number of sequences desired.
+        `new_name` (str): Name of the new sliced file. If not given, the same name will be inputed.
+    """
+        
+    with open(file,'r+') as f:
+        
+        # Get sizes
+        fl = f.readline().split()
+        size = int(fl[0])
+        length = int(fl[1])
+        
+        
+        i = 0
+        lines = [""]*size
+        for line in f:
+            if line == '\n':
+                i=0
+            else:
+                lines[i]+=line.strip()+' '
+                i+=1
+    
+    # New file name
+    if new_name != "":
+        new_path = "/".join(file.split("/")[:-1] + [new_name])
+    else:
+        splits = file.split('.')
+        new_path = ".".join(file.split(".")[:-1] + ['_sliced.'+file.split(".")[-1]])
+        
+    with open(new_path,'w+') as f:
+        f.write(' '+str(number)+' '+str(length)+'\n')
+        for i in range(number):
+            f.write(lines[i]+'\n')
