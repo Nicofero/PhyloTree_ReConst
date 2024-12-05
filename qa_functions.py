@@ -1,7 +1,7 @@
 import numpy as np
 import dimod
 from dimod import BinaryQuadraticModel, BINARY
-from typing import Optional
+from typing import Optional, Union
 from dwave.system import DWaveSampler, EmbeddingComposite
 import time
 import matplotlib.pyplot as plt
@@ -536,7 +536,7 @@ def bf_tree(matrix,tags=[],**kwargs):
     return node
 
 # Compare trees
-def treecmp(tree1:Optional[str | Tree ],tree2:Optional[str | Tree ]):
+def treecmp(tree1:Optional[Union[str , Tree] ],tree2:Optional[Union[str , Tree]]):
     """
     Compare two input trees and returns the Robinson-Foulds distance between them
     
