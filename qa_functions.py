@@ -604,8 +604,7 @@ def slice_alignment(file,number,new_name=""):
     if new_name != "":
         new_path = "/".join(file.split("/")[:-1] + [new_name])
     else:
-        splits = file.split('.')
-        new_path = ".".join(file.split(".")[:-1] + ['_sliced.'+file.split(".")[-1]])
+        new_path = ".".join(file.split(".")[:-1] + ['_sliced_'+str(number)+'.'+file.split(".")[-1]])
         
     with open(new_path,'w+') as f:
         f.write(' '+str(number)+' '+str(length)+'\n')
