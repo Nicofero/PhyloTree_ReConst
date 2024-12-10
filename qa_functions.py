@@ -103,13 +103,13 @@ class TreeNode:
         self.children = []  # A list of child selfs
     
     def print_tree(self, prefix="", is_last=True):
-        """
+        r"""
         Prints the tree structure with a visually appealing layout.
 
         Args:
-            node (TreeNode): The current node to print.
-            prefix (str): The prefix for the current node (e.g., spaces and vertical bars).
-            is_last (bool): True if the node is the last child of its parent.
+            `node` (TreeNode): The current node to print.
+            `prefix` (str): The prefix for the current node (e.g., spaces and vertical bars).
+            `is_last` (bool): True if the node is the last child of its parent.
         """
         if self is None:
             return
@@ -129,12 +129,12 @@ class TreeNode:
                 child.print_tree(prefix=next_prefix, is_last=(i == len(self.children) - 1))
     
     def _newick_tree(self,exp=[""]):
-        """
+        r"""
         Prints the tree structure with a visually appealing layout.
 
         Args:
-            node (TreeNode): The current node to print.
-            is_last (bool): True if the node is the last child of its parent.
+            `node` (TreeNode): The current node to print.
+            `is_last` (bool): True if the node is the last child of its parent.
         """
         if self is None:
             return
@@ -156,12 +156,12 @@ class TreeNode:
         return exp
             
     def create_newick_file(self,file_name:str='tree'):
-        """
+        r"""
         Creates a newick file from the chosen tree
         
         Args:
-            tree (TreeNode): The full tree
-            file_name (str): The name of the file to be written without extension
+            `tree` (TreeNode): The full tree
+            `file_name` (str): The name of the file to be written without extension
         """
         exp = [""]
         self._newick_tree(exp)
@@ -238,7 +238,7 @@ class TreeNode:
         plt.show()  
         
     def display_tree(self,tree_size=1,square=True,names=[]):
-        """"Displays the tree as a graph. Encapsulates 2 functions to easily handle the fancy display.
+        r""""Displays the tree as a graph. Encapsulates 2 functions to easily handle the fancy display.
         
         Args:
             `tree_size` (int): Factor of the renderization size (not aspect ratio)
@@ -365,7 +365,7 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
     
     Args:
         `matrix`: The matrix defining the graph.
-        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT**
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
     Returns:
         The `TreeNode` containing the full tree. 
     """
@@ -452,7 +452,7 @@ def bf_tree(matrix,tags=[],**kwargs):
     
     Args:
         `matrix`: The matrix defining the graph.
-        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT**
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
         
     Returns:
         The `TreeNode` containing the full tree. 
@@ -471,6 +471,8 @@ def bf_tree(matrix,tags=[],**kwargs):
     rows = sub_mat.shape[0]
     
     var = int(np.floor(rows/2.0))+1
+    
+    alpha = rows*100
 
     # Run min_cut for each configuration
     for i in range(1,var):
@@ -479,9 +481,9 @@ def bf_tree(matrix,tags=[],**kwargs):
             start = time.time_ns()/1000000
             
         if not tags:
-            problem = create_cqm_problem(sub_mat,c=i,alpha=500)
+            problem = create_cqm_problem(sub_mat,c=i,alpha=alpha)
         else:
-            problem = create_cqm_problem(sub_mat,tags=tags,c=i,alpha=500)
+            problem = create_cqm_problem(sub_mat,tags=tags,c=i,alpha=alpha)
 
         sol = solver.sample_cqm(problem)
 
@@ -537,7 +539,7 @@ def bf_tree(matrix,tags=[],**kwargs):
 
 # Compare trees
 def treecmp(tree1:Optional[Union[str , Tree] ],tree2:Optional[Union[str , Tree]]):
-    """
+    r"""
     Compare two input trees and returns the Robinson-Foulds distance between them
     
     Args:
@@ -575,7 +577,7 @@ def treecmp(tree1:Optional[Union[str , Tree] ],tree2:Optional[Union[str , Tree]]
 ####################################################################################
 
 def slice_alignment(file,number,new_name=""):
-    """Slices alignment of size N to size number, and creates a new phylip file to save it.
+    r"""Slices alignment of size N to size number, and creates a new phylip file to save it.
     
     Args:
         `file` (str): Name of the file where the alignment is located.

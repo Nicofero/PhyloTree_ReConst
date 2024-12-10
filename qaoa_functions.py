@@ -15,6 +15,7 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2
 from qiskit.visualization import plot_histogram
 from scipy.optimize import minimize
+from qa_functions import TreeNode,min_cut_c,n_cut,Timer
 
 ##############################################
 #                                            #
@@ -63,7 +64,7 @@ def circuit_size(qc:QuantumCircuit)->int:
 
 # Transforms a Pauli expression to a supported quadratic expression
 def pauliop_to_exp(op:SparsePauliOp)->str:
-    """
+    r"""
     Transforms a Pauli expression to a supported quadratic expression
     
     Args:
@@ -75,7 +76,7 @@ def pauliop_to_exp(op:SparsePauliOp)->str:
     
     exp = ''
     for i,pauli in enumerate(op.paulis):
-        exp+=str(int(op.coeffs[i].real))
+        exp+=str(float(op.coeffs[i].real))
         for i,char in enumerate(pauli.to_label()):
             if char == 'Z':
                 exp+='Z'+str(i)
@@ -119,12 +120,11 @@ def create_ansatz_layer(qc:QuantumCircuit,expression:Union[str,SparsePauliOp],ph
             coefs[0]=1
         if coefs[0] == '-':
             coefs[0]=-1
-        coefs = [int(t) for t in coefs]
         if gate == 1:
-            qc.rz(2*coefs[0]*phi,coefs[1])
+            qc.rz(2*float(coefs[0])*phi,int(coefs[1]))
             qc.barrier()
         else:
-            qc = interaction_term(qc,coefs[0]*phi,coefs[1],coefs[2])
+            qc = interaction_term(qc,float(coefs[0])*phi,int(coefs[1]),int(coefs[2]))
             
     size = circuit_size(qc)
     for i in range(size):
@@ -199,17 +199,16 @@ def eval_energy(expression:Union[str,SparsePauliOp],factor:str):
             coefs[0]=1
         if coefs[0] == '-':
             coefs[0]=-1
-        coefs = [int(x) for x in coefs]
         if gate == 1:
-            energy += (-2*int(factor[coefs[1]])+1)*coefs[0]
+            energy += (-2*int(factor[int(coefs[1])])+1)*float(coefs[0])
         else:
-            energy += (2*np.abs(int(factor[coefs[1]])+int(factor[coefs[2]])-1)-1)*coefs[0]
+            energy += (2*np.abs(int(factor[int(coefs[1])])+int(factor[int(coefs[2])])-1)-1)*float(coefs[0])
     
     return energy
 
 # Get energy full
 def get_energy(qc:QuantumCircuit,expression,shots=1024):
-    """
+    r"""
     Returns the energy from an execution of a QuantumCircuit
     
     Args:
@@ -242,7 +241,7 @@ def get_energy(qc:QuantumCircuit,expression,shots=1024):
 
 # Theoretical perfection
 def get_energy_statevector(qc:QuantumCircuit,expression,size):
-    """
+    r"""
     Returns the energy from an execution of a QuantumCircuit
     
     Args:
@@ -269,7 +268,7 @@ def get_energy_statevector(qc:QuantumCircuit,expression,size):
 
 class QAOA:    
     
-    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA'):
+    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=[0.,0.]):
         if type(exp) == str:
             self.exp = exp
         else:
@@ -279,6 +278,11 @@ class QAOA:
         self.method = method
         self.param = [0.]*2*layers
         self.min = np.inf
+        self.shots = shots
+        if layers == len(x0)/2:
+            self.x0 = x0
+        else:
+            self.x0 = [0.]*(layers*2)
         
         
     def objective (self,x):
@@ -289,7 +293,7 @@ class QAOA:
         
         qc = create_ansatz(self.exp,self.size,self.layers,gamma,beta)
         
-        energy = get_energy(qc,self.exp)
+        energy = get_energy(qc,self.exp,shots=self.shots)
         
         return energy
     
