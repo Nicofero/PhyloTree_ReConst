@@ -240,7 +240,7 @@ def get_energy(qc:QuantumCircuit,expression,shots=1024):
     return energy
 
 # Theoretical perfection
-def get_energy_statevector(qc:QuantumCircuit,expression,size):
+def get_energy_statevector(qc:QuantumCircuit,expression):
     r"""
     Returns the energy from an execution of a QuantumCircuit
     
@@ -255,10 +255,10 @@ def get_energy_statevector(qc:QuantumCircuit,expression,size):
     
     # Define the simulator, in a future version, this would be a parameter
     st = Statevector(qc)
-
+    size = circuit_size(qc)
     # Using the formula from [1]
     energy = 0
-    for i in range(2**circuit_size(qc)):
+    for i in range(2**size):
         energy+= (st[i]**2).real*eval_energy(expression,f"{i:0{size}b}")
     
     return energy
@@ -282,7 +282,7 @@ class QAOA:
         if layers == len(x0)/2:
             self.x0 = x0
         else:
-            self.x0 = [0.]*(layers*2)
+            self.x0 = np.random.random(layers*2)
         
         
     def objective (self,x):
@@ -299,11 +299,8 @@ class QAOA:
     
     
     def get_min(self):
-        # Define intial points
-        initial_guess = np.random.random(2*self.layers)
-
         # Run minimization 
-        result = minimize(self.objective,initial_guess,method=self.method)
+        result = minimize(self.objective,self.x0,method=self.method)
         self.param = result.x
         self.min = result.fun
         
