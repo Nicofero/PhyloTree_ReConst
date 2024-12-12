@@ -303,6 +303,7 @@ class QAOA:
         result = minimize(self.objective,self.x0,method=self.method)
         self.param = result.x
         self.min = result.fun
+        print(self.min,self.param)
         
     def get_opt_circ(self):
 
