@@ -23,12 +23,14 @@
 - **qaoa_test.ipynb:** This notebook contains the different tests for creating a gate level QAOA algorithm.
 - **qa_pyhlo_tree.ipynb:** This notebook cointains the creation of phylogenetic trees using D-Wave Quantum Annealer.  
 - **qa_functions.py:** Python library that contains the functions for the QA.
-- **test.ipynb:** Random tests.
+- **qaoa_pyhlo_tree.ipynb:** This notebook cointains the creation of phylogenetic trees using QAOA.  
+- **qaoa_functions.py:** Python library that contains the functions for the QAOA.
 
 ### Description of the directories
 
 - **/alignments:** Contains the aligned sequences of proteins or nucleotides. The files are in `phylip` or `fasta` format.
 - **/trees:** Contains the trees created by the algorithm in newick format.
+- **/miscelaneous:** Multiple test files.
 
 ## Main references
 
