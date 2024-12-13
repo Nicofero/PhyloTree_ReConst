@@ -303,7 +303,8 @@ class QAOA:
         result = minimize(self.objective,self.x0,method=self.method)
         self.param = result.x
         self.min = result.fun
-        print(self.min,self.param)
+        
+        return self.min,self.param
         
     def get_opt_circ(self):
 
@@ -311,3 +312,75 @@ class QAOA:
         self.qc = create_ansatz(self.exp,self.size,self.layers,self.param[:self.layers],self.param[self.layers:])
         
         return self.qc
+    
+# Prepare expression
+def prepare_exp(matrix:np.ndarray,c=0):
+    r"""
+    Prepares the Hamiltonian needed for the QAOA circuit
+    
+    Args:
+        `matrix` (np.ndarray): Numpy array containing the simmetric (or lower triangular matrix) that defines the problem.
+        `c` (int): Number of non-zero variables.
+        `tags` (list): Defines the name of the variables. **MUST BE AN INT LIST**
+        
+    Returns:
+        The expression as a string.        
+    """
+    
+    
+    alpha = matrix.shape[0]*100
+    h, J, _ = min_cut_c(matrix,c=c,alpha=alpha).to_ising()
+    # print(f'Linar coeffs: {h}')
+    # print(f'Quadratic terms: {J}')
+    exp = ""
+
+    for term in J:
+        exp+="+"+str(J[term])+"Z"+str(term[0])+"Z"+str(term[1])
+
+    for term in h:
+        if h[term]>0:
+            exp+="+"+str(h[term])+"Z"+str(term)
+        elif h[term]<0:
+            exp+=str(h[term])+"Z"+str(term)
+            
+    return exp 
+
+# Combination of solutions
+def combine_inverse_keys(original_dict):
+    """
+    Combines the reciprocal solutions as only one solution
+    """
+    new_dict = {}
+    
+    for key, value in original_dict.items():
+        # Compute the inverse key
+        inverse_key = ''.join('1' if bit == '0' else '0' for bit in key)
+        
+        # Sort the pair to ensure consistent representation
+        combined_key = min(key, inverse_key)
+        
+        # Add value to the combined key
+        if combined_key in new_dict:
+            new_dict[combined_key] += value
+        else:
+            new_dict[combined_key] = value
+    
+    return new_dict
+
+# Best solution
+def get_bes_sol(qc:QuantumCircuit)->dict:
+    """   Runs the quantic circuit simulation and returns the value with more counts   """
+    sim = AerSimulator()
+
+    # Transpile the circuit for the simulator or real QPU
+    qc.measure_all()
+    qc = transpile(qc,sim)
+
+    # Run the circuit and collect results
+    sampler = SamplerV2()
+    job = sampler.run([qc],shots=2048)
+    job_result = job.result()
+    counts=job_result[0].data.meas.get_counts()
+    n_counts = combine_inverse_keys(counts)
+    best = max(n_counts,key=n_counts.get)
+    return best
