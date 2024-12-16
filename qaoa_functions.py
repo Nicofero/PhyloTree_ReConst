@@ -16,6 +16,7 @@ from qiskit_aer.primitives import SamplerV2
 from qiskit.visualization import plot_histogram
 from scipy.optimize import minimize
 from qa_functions import TreeNode,min_cut_c,n_cut,Timer
+import dask
 
 ##############################################
 #                                            #
@@ -297,7 +298,7 @@ class QAOA:
         
         return energy
     
-    
+    @dask.delayed
     def get_min(self):
         # Run minimization 
         result = minimize(self.objective,self.x0,method=self.method)
