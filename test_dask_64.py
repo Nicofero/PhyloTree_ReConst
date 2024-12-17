@@ -1,30 +1,11 @@
-import numpy as np
-import dimod
-from dimod import BinaryQuadraticModel, BINARY
-from typing import Optional
-import time
-import networkx as nx
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import random
-import re
+from qa_functions import *
 from qaoa_functions import *
-from qa_functions import TreeNode,min_cut_c,n_cut,Timer
-from Bio.Phylo.TreeConstruction import DistanceTreeConstructor
-from Bio import Phylo
-from Bio.Phylo.TreeConstruction import DistanceMatrix
-from qiskit.quantum_info import Pauli,SparsePauliOp,Statevector
-from typing import Union
-from colorama import Fore
-import numpy as np
-from qiskit import QuantumCircuit, transpile
-from qiskit_aer import AerSimulator
-from qiskit_aer.primitives import SamplerV2
+import time
+import re
 from qiskit.visualization import plot_histogram
-from scipy.optimize import minimize
+import multiprocessing
 import dask
 from distributed import Client
-import dask.array as da
 import argparse
 from multiprocessing import freeze_support
 

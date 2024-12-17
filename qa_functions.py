@@ -5,7 +5,6 @@ from typing import Optional, Union
 from dwave.system import DWaveSampler, EmbeddingComposite
 import time
 import matplotlib.pyplot as plt
-import random
 import sys
 import re
 from Bio import Align

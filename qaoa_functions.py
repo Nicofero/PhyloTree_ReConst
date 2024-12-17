@@ -6,14 +6,12 @@
     Description: This script contains all the functions for the creation of Phylogenetic trees using a QAOA approach for the optimization problem.
 """
 
-from qiskit.quantum_info import Pauli,SparsePauliOp,Statevector
+from qiskit.quantum_info import SparsePauliOp,Statevector
 from typing import Union
-from colorama import Fore
 import numpy as np
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2
-from qiskit.visualization import plot_histogram
 from scipy.optimize import minimize
 from qa_functions import TreeNode,min_cut_c,n_cut,Timer
 import dask
