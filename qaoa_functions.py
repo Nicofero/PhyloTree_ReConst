@@ -296,7 +296,7 @@ class QAOA:
         
         return energy
     
-    @dask.delayed
+    # @dask.delayed
     def get_min(self):
         # Run minimization 
         result = minimize(self.objective,self.x0,method=self.method)
