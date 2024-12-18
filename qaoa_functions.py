@@ -14,6 +14,7 @@ from qiskit_aer import AerSimulator
 from qiskit_aer.primitives import SamplerV2
 from scipy.optimize import minimize
 from qa_functions import TreeNode,min_cut_c,n_cut,Timer
+import re
 import dask
 
 ##############################################
@@ -105,12 +106,12 @@ def create_ansatz_layer(qc:QuantumCircuit,expression:Union[str,SparsePauliOp],ph
     expression = expression.replace(' ', '')
     
     # Standardize the polynomial string to handle positive terms properly
-    expression = expression.replace('-', '+-')
+    expression = re.sub(r'(?<=[0-9])(-)(?=[0-9])','+-',expression)
     if expression[0] == '+':
         expression = expression[1:]
     
     # Split the string into terms
-    terms = expression.split('+')
+    terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-)',expression)
     
     for term in terms:
         gate = term.count('Z')
@@ -183,12 +184,12 @@ def eval_energy(expression:Union[str,SparsePauliOp],factor:str):
     expression = expression.replace(' ', '')
     
     # Standardize the polynomial string to handle positive terms properly
-    expression = expression.replace('-', '+-')
+    expression = re.sub(r'(?<=[0-9])(-)(?=[0-9])','+-',expression)
     if expression[0] == '+':
         expression = expression[1:]
     
     # Split the string into terms
-    terms = expression.split('+')
+    terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-)',expression)
     
     
     for term in terms:
