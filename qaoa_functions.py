@@ -106,6 +106,7 @@ def create_ansatz_layer(qc:QuantumCircuit,expression:Union[str,SparsePauliOp],ph
     expression = expression.replace(' ', '')
     
     # Standardize the polynomial string to handle positive terms properly
+    # Esto creo que esta mal, habria que comprobarlo
     expression = re.sub(r'(?<=[0-9])(-)(?=[0-9])','+-',expression)
     if expression[0] == '+':
         expression = expression[1:]
