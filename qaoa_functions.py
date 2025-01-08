@@ -16,6 +16,7 @@ from scipy.optimize import minimize
 from qa_functions import TreeNode,min_cut_c,n_cut,Timer
 import re
 import dask
+import time
 
 ##############################################
 #                                            #
@@ -233,6 +234,8 @@ def get_energy(qc:QuantumCircuit,expression,shots=1024):
     job_result = job.result()
     counts=job_result[0].data.meas.get_counts()
 
+    # Aqui se podrian combinar los valores inversos, creo que tendria sentido
+
     # Using the formula from [1]
     energy = 0
     for key in counts:
@@ -385,3 +388,89 @@ def get_bes_sol(qc:QuantumCircuit)->dict:
     n_counts = combine_inverse_keys(counts)
     best = max(n_counts,key=n_counts.get)
     return best
+
+def qaoa_phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
+    r"""
+    Recursive function that uses QAOA to create the Phylogenetic tree using Ncut
+    
+    Args:
+        `matrix`: The matrix defining the graph.
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
+    Returns:
+        The `TreeNode` containing the full tree. 
+    """
+    ncuts = []
+    n_graph_0 = []
+    n_graph_1 = []
+    
+    if not tags:
+        sub_mat = matrix
+        tags = list(range(matrix.shape[0]))
+    else:
+        sub_mat = matrix[np.ix_(tags, tags)]
+        
+    rows = sub_mat.shape[0]
+    
+    var = int(np.floor(rows/2.0))+1
+
+    # Run min_cut for each configuration
+    for i in range(1,var):
+        print(f'Corte con {i}')
+        if 'timer' in kwargs:
+            start = time.time_ns()/1000000
+            
+        # Prepare the expression and run the QAOA    
+        problem = prepare_exp(sub_mat,c=i)
+        qaoa = QAOA(problem,rows)
+        qaoa.get_opt_circ()
+        result = get_bes_sol(qaoa.qc)
+                
+        # Time measurement
+        if 'timer' in kwargs:
+            end = time.time_ns()/1000000
+            kwargs['timer'].update(end-start)
+            
+        n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
+        n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
+        print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+        
+        if not n_graph_0[i-1] or not n_graph_1[i-1]:
+            n_graph_0.pop()
+            n_graph_1.pop()
+        else:
+            ncuts.append(n_cut(qaoa.min,n_graph_0[i-1],n_graph_1[i-1],matrix))
+        
+    
+    # Get the cuts created by the minimum ncut value
+    index = np.argmin(ncuts)
+    print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    
+    node = TreeNode(tags)
+    
+    # Recursivity in the first graph
+    if len(n_graph_0[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index],timer=kwargs['timer']))
+        else:
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index]))
+    else:
+        leaf = TreeNode(n_graph_0[index])
+        if len(n_graph_0[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_0[index][0]]))
+            leaf.children.append(TreeNode([n_graph_0[index][1]]))
+        node.children.append(leaf)
+        
+    # Recursivity in the first graph
+    if len(n_graph_1[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index],timer=kwargs['timer']))
+        else:
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index]))
+    else:
+        leaf = TreeNode(n_graph_1[index])
+        if len(n_graph_1[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_1[index][0]]))
+            leaf.children.append(TreeNode([n_graph_1[index][1]]))
+        node.children.append(leaf)
+    
+    return node
