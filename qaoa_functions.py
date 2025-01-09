@@ -234,8 +234,6 @@ def get_energy(qc:QuantumCircuit,expression,shots=1024):
     job_result = job.result()
     counts=job_result[0].data.meas.get_counts()
 
-    # Aqui se podrian combinar los valores inversos, creo que tendria sentido
-
     # Using the formula from [1]
     energy = 0
     for key in counts:
