@@ -6,9 +6,13 @@
   ```
   python -m venv phylo_tree
   ```
-  - Run the enviroment
+  - Run the enviroment (Windows)
     ```
     phylo_tree\Scripts\activate
+    ```
+  - Run the enviroment (Linux)
+    ```
+    source phylo_tree/bin/activate
     ```
 
 - Install the requirements:
