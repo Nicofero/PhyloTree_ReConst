@@ -166,7 +166,7 @@ class TreeNode:
         self._newick_tree(exp)
         exp = re.sub(r",\s*\)", ")",exp[0])
         exp = re.sub(r",$", ";",exp)
-        with open(file_name+'.nwk','w+') as file:
+        with open(file_name,'w+') as file:
             file.write(exp)
             
     # More visual way
