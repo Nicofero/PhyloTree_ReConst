@@ -2,7 +2,6 @@ from qa_functions import *
 from qaoa_functions import *
 import time
 import re
-from qiskit.visualization import plot_histogram
 import dask
 from distributed import Client
 import os
@@ -22,7 +21,7 @@ def main():
     dask.config.set(scheduler='threads')
     client = Client(n_workers=num_workers)
     # print(client.scheduler_info())
-    print(client.dashboard_link)
+    # print(client.dashboard_link)
     time.sleep(10)
 
     file_names = os.listdir('matrices')
