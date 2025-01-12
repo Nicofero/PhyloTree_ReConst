@@ -387,7 +387,7 @@ def get_bes_sol(qc:QuantumCircuit)->dict:
     best = max(n_counts,key=n_counts.get)
     return best
 
-def qaoa_phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
+def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
     r"""
     Recursive function that uses QAOA to create the Phylogenetic tree using Ncut
     
@@ -413,15 +413,31 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
 
     # Run min_cut for each configuration
     for i in range(1,var):
-        print(f'Corte con {i}')
+        # print(f'Corte con {i}')
         if 'timer' in kwargs:
             start = time.time_ns()/1000000
-            
-        # Prepare the expression and run the QAOA    
-        problem = prepare_exp(sub_mat,c=i)
-        qaoa = QAOA(problem,rows)
-        qaoa.get_opt_circ()
-        result = get_bes_sol(qaoa.qc)
+        result = '0'*rows
+        while result == '0'*rows:
+            # Prepare the expression and run the QAOA    
+            if client:  
+                problem = prepare_exp(sub_mat,c=i)
+                num_problems = len(client.scheduler_info()['workers'])
+                instances = [QAOA(problem,rows) for _ in range(num_problems)]
+                futures = [client.submit(instance.get_min,pure=False) for instance in instances]
+                # Gather results as they complete
+                results = client.gather(futures)
+                
+                best_tot = min(results)
+                best = best_tot[1]
+                minim = best_tot[0]
+                qc = create_ansatz(problem,rows,phi=[best[0]],beta=[best[1]])
+                result = get_bes_sol(qc)
+            else:
+                problem = prepare_exp(sub_mat,c=i)
+                qaoa = QAOA(problem,rows)
+                minim = qaoa.min
+                qaoa.get_opt_circ()
+                result = get_bes_sol(qaoa.qc)
                 
         # Time measurement
         if 'timer' in kwargs:
@@ -430,18 +446,18 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
             
         n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
         n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
-        print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+        # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
         
         if not n_graph_0[i-1] or not n_graph_1[i-1]:
             n_graph_0.pop()
             n_graph_1.pop()
         else:
-            ncuts.append(n_cut(qaoa.min,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
         
     
     # Get the cuts created by the minimum ncut value
     index = np.argmin(ncuts)
-    print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
     
     node = TreeNode(tags)
     
