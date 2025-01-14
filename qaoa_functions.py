@@ -411,14 +411,14 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
     
     var = int(np.floor(rows/2.0))+1
 
-    # Run min_cut for each configuration
-    for i in range(1,var):
-        # print(f'Corte con {i}')
-        if 'timer' in kwargs:
-            start = time.time_ns()/1000000
-        result = '0'*rows
-        while result == '0'*rows:
-            # Prepare the expression and run the QAOA    
+    # Repeat until a cut is found
+    while not ncuts:
+        # Run min_cut for each configuration
+        for i in range(1,var):
+            # print(f'Corte con {i}')
+            if 'timer' in kwargs:
+                start = time.time_ns()/1000000
+                # Prepare the expression and run the QAOA    
             if client:  
                 problem = prepare_exp(sub_mat,c=i)
                 num_problems = len(client.scheduler_info()['workers'])
@@ -438,21 +438,21 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
                 minim = qaoa.min
                 qaoa.get_opt_circ()
                 result = get_bes_sol(qaoa.qc)
+                    
+            # Time measurement
+            if 'timer' in kwargs:
+                end = time.time_ns()/1000000
+                kwargs['timer'].update(end-start)
                 
-        # Time measurement
-        if 'timer' in kwargs:
-            end = time.time_ns()/1000000
-            kwargs['timer'].update(end-start)
+            n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
+            n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
+            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
             
-        n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
-        n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
-        # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
-        
-        if not n_graph_0[i-1] or not n_graph_1[i-1]:
-            n_graph_0.pop()
-            n_graph_1.pop()
-        else:
-            ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            if not n_graph_0[i-1] or not n_graph_1[i-1]:
+                n_graph_0.pop()
+                n_graph_1.pop()
+            else:
+                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
         
     
     # Get the cuts created by the minimum ncut value
