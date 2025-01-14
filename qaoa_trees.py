@@ -37,7 +37,7 @@ def main():
             timer = Timer(0.0)
             tree_qaoa = qaoa_phylo_tree(distance_matrix,client=client,timer=timer)
 
-            with open('timer.csv','a') as fp:
+            with open('timer_qaoa.csv','a') as fp:
                 fp.write(f'{folder},{file},{timer.value}\n')
 
             file_ext = re.search(r'_([0-9]+)\.',file).group(1)

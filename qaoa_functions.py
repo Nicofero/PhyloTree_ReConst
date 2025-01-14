@@ -330,7 +330,7 @@ def prepare_exp(matrix:np.ndarray,c=0):
     """
     
     
-    alpha = matrix.shape[0]*100
+    alpha = matrix.shape[0]*1000
     h, J, _ = min_cut_c(matrix,c=c,alpha=alpha).to_ising()
     # print(f'Linar coeffs: {h}')
     # print(f'Quadratic terms: {J}')
