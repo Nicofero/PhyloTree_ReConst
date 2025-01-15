@@ -398,8 +398,6 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
         The `TreeNode` containing the full tree. 
     """
     ncuts = []
-    n_graph_0 = []
-    n_graph_1 = []
     
     if not tags:
         sub_mat = matrix
@@ -413,6 +411,9 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
 
     # Repeat until a cut is found
     while not ncuts:
+        
+        n_graph_0 = []
+        n_graph_1 = []
         # Run min_cut for each configuration
         for i in range(1,var):
             # print(f'Corte con {i}')
@@ -448,11 +449,9 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
             n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
             # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
             
-            if not n_graph_0[i-1] or not n_graph_1[i-1]:
-                n_graph_0.pop()
-                n_graph_1.pop()
-            else:
+            if n_graph_0[i-1] and n_graph_1[i-1]:
                 ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+                
         
     
     # Get the cuts created by the minimum ncut value

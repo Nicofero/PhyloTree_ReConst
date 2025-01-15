@@ -28,25 +28,26 @@ def main():
 
     for folder in file_names:
         files = os.listdir(f'matrices/{folder}')
-        for file in files:
-            # Load the sequences
-            distance_matrix = np.load(f'./matrices/{folder}/{file}')
+        if int(folder) < 18:
+            for file in files:
+                # Load the sequences
+                distance_matrix = np.load(f'./matrices/{folder}/{file}')
 
-            print(f'Generating tree from: {file}')
-            # Create the tree
-            timer = Timer(0.0)
-            tree_qaoa = qaoa_phylo_tree(distance_matrix,client=client,timer=timer)
+                print(f'Generating tree from: {file}')
+                # Create the tree
+                timer = Timer(0.0)
+                tree_qaoa = qaoa_phylo_tree(distance_matrix,client=client,timer=timer)
 
-            with open('timer_qaoa.csv','a') as fp:
-                fp.write(f'{folder},{file},{timer.value}\n')
+                with open('timer_qaoa.csv','a') as fp:
+                    fp.write(f'{folder},{file},{timer.value}\n')
 
-            file_ext = re.search(r'_([0-9]+)\.',file).group(1)
-            new_file = f'qaoa_tree_{file_ext}.newick'
-            tree_qaoa.create_newick_file(f'./trees/{folder}/{new_file}')
-            print(f'Finished {file} in {timer.value}ms')
+                file_ext = re.search(r'_([0-9]+)\.',file).group(1)
+                new_file = f'qaoa_tree_{file_ext}.newick'
+                tree_qaoa.create_newick_file(f'./trees/{folder}/{new_file}')
+                print(f'Finished {file} in {timer.value}ms')
 
-            del tree_qaoa
-            del distance_matrix
+                del tree_qaoa
+                del distance_matrix
 
 
 if __name__ == '__main__':
