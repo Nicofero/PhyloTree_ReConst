@@ -42,7 +42,7 @@ def main():
                     fp.write(f'{folder},{file},{timer.value}\n')
 
                 file_ext = re.search(r'_([0-9]+)\.',file).group(1)
-                new_file = f'qaoa_tree_{file_ext}.newick'
+                new_file = f'qaoa_3lay_{file_ext}.newick'
                 tree_qaoa.create_newick_file(f'./trees/{folder}/{new_file}')
                 print(f'Finished {file} in {timer.value}ms')
 

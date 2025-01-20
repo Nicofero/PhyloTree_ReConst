@@ -423,7 +423,7 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
             if client:  
                 problem = prepare_exp(sub_mat,c=i)
                 num_problems = len(client.scheduler_info()['workers'])
-                instances = [QAOA(problem,rows) for _ in range(num_problems)]
+                instances = [QAOA(problem,rows,layers=3) for _ in range(num_problems)]
                 futures = [client.submit(instance.get_min,pure=False) for instance in instances]
                 # Gather results as they complete
                 results = client.gather(futures)

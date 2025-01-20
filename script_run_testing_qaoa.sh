@@ -3,8 +3,8 @@
 #    Modify this to your needs
 #
 #SBATCH -c 64
-#SBATCH -t 12:0:0
-#SBATCH --mem-per-cpu=3G
+#SBATCH -t 6:0:0
+#SBATCH --mem-per-cpu=1G
 
 module load cesga/2020 miniconda3/22.11.1-1
 
