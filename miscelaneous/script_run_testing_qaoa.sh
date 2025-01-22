@@ -12,4 +12,4 @@ conda activate phylo-tree
 
 echo "Programa para los arboles pequeños con 64"
 
-python qaoa_trees.py -n 64
+python ../qaoa_trees.py -n 64
