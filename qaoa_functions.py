@@ -46,7 +46,7 @@ def interaction_term(qc: QuantumCircuit, phi, control, target)->QuantumCircuit:
     """
     
     qc.cx(control,target)
-    qc.rz(phi*2,target)
+    qc.rz(-phi*2,target)
     qc.cx(control,target)
     qc.barrier()
     
@@ -113,7 +113,7 @@ def create_ansatz_layer(qc:QuantumCircuit,expression:Union[str,SparsePauliOp],ph
         expression = expression[1:]
     
     # Split the string into terms
-    terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-)',expression)
+    terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-|Z)',expression)
     
     for term in terms:
         gate = term.count('Z')
@@ -191,7 +191,7 @@ def eval_energy(expression:Union[str,SparsePauliOp],factor:str):
         expression = expression[1:]
     
     # Split the string into terms
-    terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-)',expression)
+    terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-|Z)',expression)
     
     
     for term in terms:
@@ -302,7 +302,8 @@ class QAOA:
     # @dask.delayed
     def get_min(self):
         # Run minimization 
-        result = minimize(self.objective,self.x0,method=self.method)
+        bds = tuple((0,2*np.pi) for _ in range(self.layers)) + tuple((0,np.pi) for _ in range(self.layers))
+        result = minimize(self.objective,self.x0,method=self.method,bounds=bds)
         self.param = result.x
         self.min = result.fun
         
@@ -321,7 +322,7 @@ def prepare_exp(matrix:np.ndarray,c=0):
     Prepares the Hamiltonian needed for the QAOA circuit
     
     Args:
-        `matrix` (np.ndarray): Numpy array containing the simmetric (or lower triangular matrix) that defines the problem.
+        `matrix` (np.ndarray): Numpy array containing the symmetric (or lower triangular matrix) that defines the problem.
         `c` (int): Number of non-zero variables.
         `tags` (list): Defines the name of the variables. **MUST BE AN INT LIST**
         
