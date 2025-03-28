@@ -18,6 +18,21 @@ import re
 import dask
 import time
 
+import warnings
+import functools
+
+def deprecated(func):
+    """Decorator to mark functions as deprecated."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        warnings.warn(
+            f"{func.__name__} is deprecated and may be removed in the future.",
+            category=DeprecationWarning,
+            stacklevel=2
+        )
+        return func(*args, **kwargs)
+    return wrapper
+
 ##############################################
 #                                            #
 #          ___      _    ___    _            #
@@ -166,6 +181,7 @@ def create_ansatz(expression:str,qubits:int,layers=1,phi=[1],beta=[1]):
     return qc
 
 # Eval energy from the expression and value
+@deprecated
 def eval_energy(expression:Union[str,SparsePauliOp],factor:str):
     r"""
     Evaluates the energy of the factor given. This is the energy expectation from the state.
@@ -209,6 +225,7 @@ def eval_energy(expression:Union[str,SparsePauliOp],factor:str):
     return energy
 
 # Get energy full
+@deprecated
 def get_energy(qc:QuantumCircuit,expression,shots=1024):
     r"""
     Returns the energy from an execution of a QuantumCircuit
@@ -285,8 +302,79 @@ class QAOA:
             self.x0 = x0
         else:
             self.x0 = np.random.random(layers*2)
+        self.eval = self.eval_energy_all()
+    
+    def eval_energy_all(self):
+        r"""
+        Evaluates all the energies. This is the energy expectation from the state.
         
+        Returns:
+        A dictionary containing all the energy expectations
         
+        """
+        
+        factors = [format(i, f'0{self.size}b') for i in range(2**self.size)]
+        energy_exp = {}
+        for factor in factors:
+            energy = 0
+                            
+            self.exp = self.exp.replace(' ', '')
+            
+            # Standardize the polynomial string to handle positive terms properly
+            self.exp = re.sub(r'(?<=[0-9])(-)(?=[0-9])','+-',self.exp)
+            if self.exp[0] == '+':
+                self.exp = self.exp[1:]
+            
+            # Split the string into terms
+            terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-|Z)',self.exp)
+            
+            
+            for term in terms:
+                gate = term.count('Z')
+                coefs = term.split('Z')
+                if coefs[0] == '':
+                    coefs[0]=1
+                if coefs[0] == '-':
+                    coefs[0]=-1
+                if gate == 1:
+                    energy += (-2*int(factor[int(coefs[1])])+1)*float(coefs[0])
+                else:
+                    energy += (2*np.abs(int(factor[int(coefs[1])])+int(factor[int(coefs[2])])-1)-1)*float(coefs[0])
+                    
+            energy_exp[factor] = energy
+        return energy_exp
+    
+    def get_energy(self,qc:QuantumCircuit):
+        r"""
+        Returns the energy from an execution of a QuantumCircuit
+        
+        Args:
+            `qc`: QuantumCircuit to run.
+            
+        Returns:
+            The energy value.
+        """
+        
+        # Define the simulator, in a future version, this would be a parameter
+        sim = AerSimulator()
+        
+        # Transpile the circuit for the simulator or real QPU
+        qc.measure_all()
+        qc = transpile(qc,sim)
+
+        # Run the circuit and collect results
+        sampler = SamplerV2()
+        job = sampler.run([qc],shots=self.shots)
+        job_result = job.result()
+        counts=job_result[0].data.meas.get_counts()
+
+        # Using the formula from [1]
+        energy = 0
+        for key in counts:
+            energy+= (counts[key]/self.shots)*self.eval[key]
+        
+        return energy
+    
     def objective (self,x):
     
         # Setting up gamma and beta
@@ -295,7 +383,7 @@ class QAOA:
         
         qc = create_ansatz(self.exp,self.size,self.layers,gamma,beta)
         
-        energy = get_energy(qc,self.exp,shots=self.shots)
+        energy = self.get_energy(qc)
         
         return energy
     
