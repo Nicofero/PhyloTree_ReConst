@@ -1,0 +1,33 @@
+--------------------  1 LAYERS  --------------------
+Minimum energy for the method CG with 1 layers: -1207.1591796875. Best solution: 00100
+Minimum energy for the method BFGS with 1 layers: -1326.544921875. Best solution: 00111
+Minimum energy for the method Nelder-Mead with 1 layers: -3994.58203125. Best solution: 01000
+Minimum energy for the method L-BFGS-B with 1 layers: -596.09765625. Best solution: 00001
+Minimum energy for the method Powell with 1 layers: -7828.65625. Best solution: 01011
+Minimum energy for the method TNC with 1 layers: -1538.677734375. Best solution: 00111
+Minimum energy for the method COBYLA with 1 layers: -5281.55859375. Best solution: 01001
+Minimum energy for the method COBYQA with 1 layers: -11521.99609375. Best solution: 01001
+Minimum energy for the method SLSQP with 1 layers: -738.08203125. Best solution: 01011
+Minimum energy for the method trust-constr with 1 layers: -8562.9541015625. Best solution: 01001
+--------------------  2 LAYERS  --------------------
+Minimum energy for the method CG with 2 layers: -1010.87109375. Best solution: 01000
+Minimum energy for the method BFGS with 2 layers: -1335.2001953125. Best solution: 01101
+Minimum energy for the method Nelder-Mead with 2 layers: -6221.912109375. Best solution: 00000
+Minimum energy for the method L-BFGS-B with 2 layers: -561.9580078125. Best solution: 01101
+Minimum energy for the method Powell with 2 layers: -8229.3173828125. Best solution: 01010
+Minimum energy for the method TNC with 2 layers: -892.4345703125. Best solution: 00001
+Minimum energy for the method COBYLA with 2 layers: -6623.884765625. Best solution: 00000
+Minimum energy for the method COBYQA with 2 layers: -10897.3564453125. Best solution: 01001
+Minimum energy for the method SLSQP with 2 layers: -1598.2158203125. Best solution: 00110
+Minimum energy for the method trust-constr with 2 layers: -8932.0234375. Best solution: 01011
+--------------------  3 LAYERS  --------------------
+Minimum energy for the method CG with 3 layers: -836.548828125. Best solution: 01100
+Minimum energy for the method BFGS with 3 layers: -1067.896484375. Best solution: 01010
+Minimum energy for the method Nelder-Mead with 3 layers: -3569.310546875. Best solution: 01000
+Minimum energy for the method L-BFGS-B with 3 layers: -73.9443359375. Best solution: 01111
+Minimum energy for the method Powell with 3 layers: -10004.49609375. Best solution: 01010
+Minimum energy for the method TNC with 3 layers: -870.33984375. Best solution: 00101
+Minimum energy for the method COBYLA with 3 layers: -6096.2607421875. Best solution: 01011
+Minimum energy for the method COBYQA with 3 layers: -14291.8125. Best solution: 00000
+Minimum energy for the method SLSQP with 3 layers: -982.1455078125. Best solution: 01000
+Minimum energy for the method trust-constr with 3 layers: -11573.525390625. Best solution: 00000

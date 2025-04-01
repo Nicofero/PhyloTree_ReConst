@@ -298,6 +298,7 @@ class QAOA:
         self.param = [0.]*2*layers
         self.min = np.inf
         self.shots = shots
+        self.counts = None
         if layers == len(x0)/2:
             self.x0 = x0
         else:
@@ -373,6 +374,12 @@ class QAOA:
         for key in counts:
             energy+= (counts[key]/self.shots)*self.eval[key]
         
+        # Save circuit and counts
+        if energy < self.min:
+            self.qc = qc
+            self.counts = counts
+            self.min = energy
+        
         return energy
     
     def objective (self,x):
@@ -384,7 +391,6 @@ class QAOA:
         qc = create_ansatz(self.exp,self.size,self.layers,gamma,beta)
         
         energy = self.get_energy(qc)
-        
         return energy
     
     # @dask.delayed
@@ -394,7 +400,6 @@ class QAOA:
         result = minimize(self.objective,self.x0,method=self.method,bounds=bds)
         self.param = result.x
         self.min = result.fun
-        
         return self.min,self.param
         
     def get_opt_circ(self):

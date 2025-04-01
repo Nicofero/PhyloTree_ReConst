@@ -1,0 +1,66 @@
+--------------------  1 LAYERS  --------------------
+Minimum energy for the method CG with 1 layers: -913.0673828125. Best solution: 01101
+Minimum energy for the method BFGS with 1 layers: -1083.6220703125. Best solution: 01101
+Minimum energy for the method Nelder-Mead with 1 layers: -1972.060546875. Best solution: 01011
+Minimum energy for the method L-BFGS-B with 1 layers: -579.640625. Best solution: 00110
+Minimum energy for the method Powell with 1 layers: -7910.9013671875. Best solution: 01111
+Minimum energy for the method TNC with 1 layers: -1125.7353515625. Best solution: 01101
+Minimum energy for the method COBYLA with 1 layers: -2761.640625. Best solution: 01100
+Minimum energy for the method COBYQA with 1 layers: -10760.2275390625. Best solution: 00010
+Minimum energy for the method SLSQP with 1 layers: -536.365234375. Best solution: 00001
+Minimum energy for the method trust-constr with 1 layers: -6817.2734375. Best solution: 00010
+--------------------  2 LAYERS  --------------------
+Minimum energy for the method CG with 2 layers: -4411.0068359375. Best solution: 01110
+Minimum energy for the method BFGS with 2 layers: -5357.794921875. Best solution: 01010
+Minimum energy for the method Nelder-Mead with 2 layers: -9880.142578125. Best solution: 00010
+Minimum energy for the method L-BFGS-B with 2 layers: -4935.37890625. Best solution: 01001
+Minimum energy for the method Powell with 2 layers: -9109.4794921875. Best solution: 00011
+Minimum energy for the method TNC with 2 layers: 2900.4892578125. Best solution: 00000
+Minimum energy for the method COBYLA with 2 layers: -5881.7705078125. Best solution: 01011
+Minimum energy for the method COBYQA with 2 layers: -9541.154296875. Best solution: 01111
+Minimum energy for the method SLSQP with 2 layers: -647.259765625. Best solution: 00011
+Minimum energy for the method trust-constr with 2 layers: -9620.60546875. Best solution: 01000
+--------------------  3 LAYERS  --------------------
+Minimum energy for the method CG with 3 layers: -3188.6044921875. Best solution: 01011
+Minimum energy for the method BFGS with 3 layers: -7734.7548828125. Best solution: 00001
+Minimum energy for the method Nelder-Mead with 3 layers: -9292.93359375. Best solution: 00010
+Minimum energy for the method L-BFGS-B with 3 layers: -1541.4658203125. Best solution: 01100
+Minimum energy for the method Powell with 3 layers: -8765.306640625. Best solution: 00010
+Minimum energy for the method TNC with 3 layers: -2980.73828125. Best solution: 00100
+Minimum energy for the method COBYLA with 3 layers: -6746.4482421875. Best solution: 00010
+Minimum energy for the method COBYQA with 3 layers: -14371.4208984375. Best solution: 00010
+Minimum energy for the method SLSQP with 3 layers: -733.25390625. Best solution: 00010
+Minimum energy for the method trust-constr with 3 layers: -8850.9580078125. Best solution: 00110
+--------------------  END  --------------------
+--------------------  PARAMETERS  --------------------
+CG_1: [-5.67608944e-08 -1.87501927e-07]
+BFGS_1: [-1.31246802e-04  1.36199706e-05]
+Nelder-Mead_1: [0.00012498 0.        ]
+L-BFGS-B_1: [0. 0.]
+Powell_1: [5.01633101 0.85399552]
+TNC_1: [0. 0.]
+COBYLA_1: [0.17276616 0.279086  ]
+COBYQA_1: [0.6445614  2.63881387]
+SLSQP_1: [0. 0.]
+trust-constr_1: [0.00829563 0.09942421]
+CG_2: [0.85479572 0.17768047 0.88584605 0.60478863]
+BFGS_2: [0.3869544  0.98846016 0.17931677 0.8353443 ]
+Nelder-Mead_2: [1.02457249 0.14760155 0.99323849 0.97964014]
+L-BFGS-B_2: [0.75162882 0.58410089 0.29999099 0.65270398]
+Powell_2: [5.0042106  2.40004068 1.05633272 0.28327723]
+TNC_2: [0.02817699 0.98455765 0.88807285 0.88426521]
+COBYLA_2: [1.53425477 1.15154727 0.00608289 1.07976774]
+COBYQA_2: [0.82386257 1.04669614 1.16018138 1.06207619]
+SLSQP_2: [0.76830357 0.62062625 0.07060978 0.01714896]
+trust-constr_2: [0.91559966 0.50915251 0.74706991 0.96178866]
+CG_3: [0.33755848 0.97450471 0.11240676 0.06182021 0.66028039 0.97002263]
+BFGS_3: [1.97982602e-01 5.15056898e-01 8.22062593e-01 9.38306530e-01
+ 3.94399621e-04 1.11196958e-01]
+Nelder-Mead_3: [0.48767209 0.17008667 0.49719574 0.49150986 0.25832797 0.19099642]
+L-BFGS-B_3: [0.67939918 0.44319149 0.371714   0.16750698 0.48714978 0.98299792]
+Powell_3: [1.51887084 3.81367667 3.84918329 1.95502255 1.25444253 0.78529406]
+TNC_3: [0.90347955 0.8540942  0.55308037 0.73757908 0.85636091 0.87696285]
+COBYLA_3: [0.81574305 0.42704331 0.71391046 1.57073879 0.14560475 0.61521443]
+COBYQA_3: [0.43964948 0.21452707 0.29935472 0.00381375 2.1923166  0.34377705]
+SLSQP_3: [0.87601441 0.91695289 0.74689825 0.74709856 0.16002964 0.9408132 ]
+trust-constr_3: [0.38887505 0.72612814 0.16199708 0.25417525 0.12681692 0.60135376]
