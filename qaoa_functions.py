@@ -259,6 +259,7 @@ def get_energy(qc:QuantumCircuit,expression,shots=1024):
     return energy
 
 # Theoretical perfection
+@deprecated
 def get_energy_statevector(qc:QuantumCircuit,expression):
     r"""
     Returns the energy from an execution of a QuantumCircuit
@@ -287,7 +288,7 @@ def get_energy_statevector(qc:QuantumCircuit,expression):
 
 class QAOA:    
     
-    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=[0.,0.]):
+    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=[0.,0.],exact=False):
         if type(exp) == str:
             self.exp = exp
         else:
@@ -299,6 +300,8 @@ class QAOA:
         self.min = np.inf
         self.shots = shots
         self.counts = None
+        self.exact = exact
+        self.qc = None
         if layers == len(x0)/2:
             self.x0 = x0
         else:
@@ -382,6 +385,33 @@ class QAOA:
         
         return energy
     
+    def get_energy_statevector(self,qc:QuantumCircuit):
+        r"""
+        Returns the energy from an execution of a QuantumCircuit
+        
+        Args:
+            `qc`: QuantumCircuit to run.
+            `expression`: Expression of the Hamiltonian.
+            `size`: Size of the circuit.
+            
+        Returns:
+            The energy value.
+        """
+        
+        # Define the simulator, in a future version, this would be a parameter
+        st = Statevector(qc)
+        size = circuit_size(qc)
+        # Using the formula from [1]
+        energy = 0
+        for i in range(2**size):
+            energy+= (np.abs(st[i])**2)*self.eval[f"{i:0{size}b}"]
+            
+        if energy < self.min:
+            self.qc = qc
+            self.counts = {f"{i:0{size}b}":np.abs(st[i])**2 for i in range(2**size)}
+            self.min = energy
+        return energy
+    
     def objective (self,x):
     
         # Setting up gamma and beta
@@ -390,7 +420,10 @@ class QAOA:
         
         qc = create_ansatz(self.exp,self.size,self.layers,gamma,beta)
         
-        energy = self.get_energy(qc)
+        if not self.exact:
+            energy = self.get_energy(qc)
+        else:
+            energy = self.get_energy_statevector(qc)
         return energy
     
     # @dask.delayed
