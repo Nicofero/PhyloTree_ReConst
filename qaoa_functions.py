@@ -71,9 +71,7 @@ def interaction_term(qc: QuantumCircuit, phi, control, target)->QuantumCircuit:
 
 def circuit_size(qc:QuantumCircuit)->int:
     r"""Utility function to get the number of registers of a QuantumCircuit"""
-    size = 0
-    for reg in qc.qregs:
-        size+=reg.size
+    size = qc.num_qubits
     return size
 
 
@@ -153,7 +151,7 @@ def create_ansatz_layer(qc:QuantumCircuit,expression:Union[str,SparsePauliOp],ph
 # Create full ansatz (kind of stupid)
 def create_ansatz(expression:str,qubits:int,layers=1,phi=[1],beta=[1]):
     r"""
-    Creates an ansatz. However you need to start your circuit with h gates to enter superposition.
+    Creates an QAOA ansatz.
     
     Args:
         `expression`: Hamiltonian to optimize. Either in str or pauli expression.
