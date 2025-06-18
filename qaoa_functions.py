@@ -288,161 +288,161 @@ def get_energy_statevector(qc:QuantumCircuit,expression):
 
 # Now the important part, the minimization. We will use a class
 
-class QAOA:    
+# class QAOA:    
     
-    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=[0.,0.],exact=False):
-        if type(exp) == str:
-            self.exp = exp
-        else:
-            self.exp = pauliop_to_exp(exp)
-        self.size = size
-        self.layers = layers
-        self.method = method
-        self.param = [0.]*2*layers
-        self.min = np.inf
-        self.shots = shots
-        self.counts = None
-        self.exact = exact
-        self.qc = None
-        if layers == len(x0)/2:
-            self.x0 = x0
-        else:
-            self.x0 = np.random.random(layers*2)
-        self.eval = self.eval_energy_all()
+#     def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=[0.,0.],exact=False):
+#         if type(exp) == str:
+#             self.exp = exp
+#         else:
+#             self.exp = pauliop_to_exp(exp)
+#         self.size = size
+#         self.layers = layers
+#         self.method = method
+#         self.param = [0.]*2*layers
+#         self.min = np.inf
+#         self.shots = shots
+#         self.counts = None
+#         self.exact = exact
+#         self.qc = None
+#         if layers == len(x0)/2:
+#             self.x0 = x0
+#         else:
+#             self.x0 = np.random.random(layers*2)
+#         self.eval = self.eval_energy_all()
     
-    def eval_energy_all(self):
-        r"""
-        Evaluates all the energies. This is the energy expectation from the state.
+#     def eval_energy_all(self):
+#         r"""
+#         Evaluates all the energies. This is the energy expectation from the state.
         
-        Returns:
-        A dictionary containing all the energy expectations
+#         Returns:
+#         A dictionary containing all the energy expectations
         
-        """
+#         """
         
-        factors = [format(i, f'0{self.size}b') for i in range(2**self.size)]
-        energy_exp = {}
-        for factor in factors:
-            energy = 0
+#         factors = [format(i, f'0{self.size}b') for i in range(2**self.size)]
+#         energy_exp = {}
+#         for factor in factors:
+#             energy = 0
                             
-            self.exp = self.exp.replace(' ', '')
+#             self.exp = self.exp.replace(' ', '')
             
-            # Standardize the polynomial string to handle positive terms properly
-            self.exp = re.sub(r'(?<=[0-9])(-)(?=[0-9])','+-',self.exp)
-            if self.exp[0] == '+':
-                self.exp = self.exp[1:]
+#             # Standardize the polynomial string to handle positive terms properly
+#             self.exp = re.sub(r'(?<=[0-9])(-)(?=[0-9])','+-',self.exp)
+#             if self.exp[0] == '+':
+#                 self.exp = self.exp[1:]
             
-            # Split the string into terms
-            terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-|Z)',self.exp)
+#             # Split the string into terms
+#             terms = re.split(r'(?<=[0-9])(?:\+)(?=[0-9]|-|Z)',self.exp)
             
             
-            for term in terms:
-                gate = term.count('Z')
-                coefs = term.split('Z')
-                if coefs[0] == '':
-                    coefs[0]=1
-                if coefs[0] == '-':
-                    coefs[0]=-1
-                if gate == 1:
-                    energy += (-2*int(factor[int(coefs[1])])+1)*float(coefs[0])
-                else:
-                    energy += (2*np.abs(int(factor[int(coefs[1])])+int(factor[int(coefs[2])])-1)-1)*float(coefs[0])
+#             for term in terms:
+#                 gate = term.count('Z')
+#                 coefs = term.split('Z')
+#                 if coefs[0] == '':
+#                     coefs[0]=1
+#                 if coefs[0] == '-':
+#                     coefs[0]=-1
+#                 if gate == 1:
+#                     energy += (-2*int(factor[int(coefs[1])])+1)*float(coefs[0])
+#                 else:
+#                     energy += (2*np.abs(int(factor[int(coefs[1])])+int(factor[int(coefs[2])])-1)-1)*float(coefs[0])
                     
-            energy_exp[factor] = energy
-        return energy_exp
+#             energy_exp[factor] = energy
+#         return energy_exp
     
-    def get_energy(self,qc:QuantumCircuit):
-        r"""
-        Returns the energy from an execution of a QuantumCircuit
+#     def get_energy(self,qc:QuantumCircuit):
+#         r"""
+#         Returns the energy from an execution of a QuantumCircuit
         
-        Args:
-            `qc`: QuantumCircuit to run.
+#         Args:
+#             `qc`: QuantumCircuit to run.
             
-        Returns:
-            The energy value.
-        """
+#         Returns:
+#             The energy value.
+#         """
         
-        # Define the simulator, in a future version, this would be a parameter
-        sim = AerSimulator()
+#         # Define the simulator, in a future version, this would be a parameter
+#         sim = AerSimulator()
         
-        # Transpile the circuit for the simulator or real QPU
-        qc.measure_all()
-        qc = transpile(qc,sim)
+#         # Transpile the circuit for the simulator or real QPU
+#         qc.measure_all()
+#         qc = transpile(qc,sim)
 
-        # Run the circuit and collect results
-        sampler = SamplerV2()
-        job = sampler.run([qc],shots=self.shots)
-        job_result = job.result()
-        counts=job_result[0].data.meas.get_counts()
+#         # Run the circuit and collect results
+#         sampler = SamplerV2()
+#         job = sampler.run([qc],shots=self.shots)
+#         job_result = job.result()
+#         counts=job_result[0].data.meas.get_counts()
 
-        # Using the formula from [1]
-        energy = 0
-        for key in counts:
-            energy+= (counts[key]/self.shots)*self.eval[key]
+#         # Using the formula from [1]
+#         energy = 0
+#         for key in counts:
+#             energy+= (counts[key]/self.shots)*self.eval[key]
         
-        # Save circuit and counts
-        if energy < self.min:
-            self.qc = qc
-            self.counts = counts
-            self.min = energy
+#         # Save circuit and counts
+#         if energy < self.min:
+#             self.qc = qc
+#             self.counts = counts
+#             self.min = energy
         
-        return energy
+#         return energy
     
-    def get_energy_statevector(self,qc:QuantumCircuit):
-        r"""
-        Returns the energy from an execution of a QuantumCircuit
+#     def get_energy_statevector(self,qc:QuantumCircuit):
+#         r"""
+#         Returns the energy from an execution of a QuantumCircuit
         
-        Args:
-            `qc`: QuantumCircuit to run.
-            `expression`: Expression of the Hamiltonian.
-            `size`: Size of the circuit.
+#         Args:
+#             `qc`: QuantumCircuit to run.
+#             `expression`: Expression of the Hamiltonian.
+#             `size`: Size of the circuit.
             
-        Returns:
-            The energy value.
-        """
+#         Returns:
+#             The energy value.
+#         """
         
-        # Define the simulator, in a future version, this would be a parameter
-        st = Statevector(qc)
-        size = circuit_size(qc)
-        # Using the formula from [1]
-        energy = 0
-        for i in range(2**size):
-            energy+= (np.abs(st[i])**2)*self.eval[f"{i:0{size}b}"]
+#         # Define the simulator, in a future version, this would be a parameter
+#         st = Statevector(qc)
+#         size = circuit_size(qc)
+#         # Using the formula from [1]
+#         energy = 0
+#         for i in range(2**size):
+#             energy+= (np.abs(st[i])**2)*self.eval[f"{i:0{size}b}"]
             
-        if energy < self.min:
-            self.qc = qc
-            self.counts = {f"{i:0{size}b}":np.abs(st[i])**2 for i in range(2**size)}
-            self.min = energy
-        return energy
+#         if energy < self.min:
+#             self.qc = qc
+#             self.counts = {f"{i:0{size}b}":np.abs(st[i])**2 for i in range(2**size)}
+#             self.min = energy
+#         return energy
     
-    def objective (self,x):
+#     def objective (self,x):
     
-        # Setting up gamma and beta
-        gamma = x[:self.layers]
-        beta = x[self.layers:]
+#         # Setting up gamma and beta
+#         gamma = x[:self.layers]
+#         beta = x[self.layers:]
         
-        qc = create_ansatz(self.exp,self.size,self.layers,gamma,beta)
+#         qc = create_ansatz(self.exp,self.size,self.layers,gamma,beta)
         
-        if not self.exact:
-            energy = self.get_energy(qc)
-        else:
-            energy = self.get_energy_statevector(qc)
-        return energy
+#         if not self.exact:
+#             energy = self.get_energy(qc)
+#         else:
+#             energy = self.get_energy_statevector(qc)
+#         return energy
     
-    # @dask.delayed
-    def get_min(self):
-        # Run minimization 
-        bds = tuple((0,2*np.pi) for _ in range(self.layers)) + tuple((0,np.pi) for _ in range(self.layers))
-        result = minimize(self.objective,self.x0,method=self.method,bounds=bds)
-        self.param = result.x
-        self.min = result.fun
-        return self.min,self.param
+#     # @dask.delayed
+#     def get_min(self):
+#         # Run minimization 
+#         bds = tuple((0,2*np.pi) for _ in range(self.layers)) + tuple((0,np.pi) for _ in range(self.layers))
+#         result = minimize(self.objective,self.x0,method=self.method,bounds=bds)
+#         self.param = result.x
+#         self.min = result.fun
+#         return self.min,self.param
         
-    def get_opt_circ(self):
+#     def get_opt_circ(self):
 
-        self.get_min()
-        self.qc = create_ansatz(self.exp,self.size,self.layers,self.param[:self.layers],self.param[self.layers:])
+#         self.get_min()
+#         self.qc = create_ansatz(self.exp,self.size,self.layers,self.param[:self.layers],self.param[self.layers:])
         
-        return self.qc
+#         return self.qc
     
 # Prepare expression
 def prepare_exp(matrix:np.ndarray,c=0):
@@ -670,9 +670,8 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],**kwargs):
     
     var = int(np.floor(rows/2.0))+1
     
-    sampler = BackendSampler(backend=AerSimulator())
-    result = '0'*rows
-    # Repeat until a cut is found
+    sampler = BackendSampler(backend=AerSimulator())    
+    
     while not ncuts:
         
         n_graph_0 = []
@@ -685,6 +684,8 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],**kwargs):
                 # Prepare the expression and run the QAOA    
             problem = prepare_exp(sub_mat,c=i)
             pstring = to_pauli_string(problem,rows)
+            # Repeat until a cut is found
+            result = '0'*rows
             while result == '0'*rows or result == '1'*rows:
                 qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=500), reps=1)
 
@@ -693,7 +694,6 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],**kwargs):
 
                 # Extract the measurement distribution
                 result = rest.best_measurement['bitstring']
-                qaoa = QAOA(problem,rows)
                 minim = rest.eigenvalue.real
                     
             # Time measurement
@@ -708,7 +708,6 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],**kwargs):
             if n_graph_0[i-1] and n_graph_1[i-1]:
                 ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
                 
-        
     
     # Get the cuts created by the minimum ncut value
     index = np.argmin(ncuts)
@@ -719,9 +718,9 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],**kwargs):
     # Recursivity in the first graph
     if len(n_graph_0[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index],timer=kwargs['timer']))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_0[index],timer=kwargs['timer']))
         else:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index]))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_0[index]))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -732,9 +731,9 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],**kwargs):
     # Recursivity in the first graph
     if len(n_graph_1[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index],timer=kwargs['timer']))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],timer=kwargs['timer']))
         else:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index]))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index]))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
