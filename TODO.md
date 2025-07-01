@@ -1,13 +1,15 @@
 # TODO, mis notas
 
-Una vez acabada la introducción falta lo siguiente para acabar la redacción del informe:
+## Prácticas de verano
 
-- [x] Explicación de los resultados vistos y lo que implican las gráficas. Esto creo que debería ir en pruebas.
-- [x] Información que extraemos de estos resultados vistos anteriormente, y relacionar estos resultados con los objetivos iniciales
-- [x] Escribir conclusión
+Lo principal es trabajar en el congreso al principio y en el paper despues, pero la principal tarea debería ser pasar el QAOA a un método propio utilizando QAOAAnsatz de Qiskit, y calcular la energia de manera directa $\bra{\beta,\gamma}H_c\ket{\beta,\gamma}$. Como tengo el hamiltoniano con Pauli Strings, puedo sacar directamente la matriz $H_c$. Utilizando esto debería funcionar bien QAOA.
 
-Además de esto, aunque en un escalón más bajo queda:
-- [] Escribir resumen
-- [] Escribir manual de usuario
-- [] Acabar el manual técnico añadiendo el script para ver caracteristicas de los arboles
-- [] Actualizar requirements
+Después de esto, sería ver si esto funciona en el Qmio, y si no, ver como hacer, pero puede ser pasar el circuito a otro lenguaje. Con esto, mas lo del paper, debería ser suficiente.
+
+Los pasos serían:
+
+- [] Presentar TFG
+- [] Finalizar la presentación del congreso
+- [] Ir al congreso
+- [] Pruebas en el Qmio
+- [] Paper
