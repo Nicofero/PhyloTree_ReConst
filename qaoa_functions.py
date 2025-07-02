@@ -63,10 +63,11 @@ def interaction_term(qc: QuantumCircuit, phi, control, target)->QuantumCircuit:
     Returns:
         The modified QuantumCircuit    
     """
-    
-    qc.cx(control,target)
-    qc.rz(-phi*2,target)
-    qc.cx(control,target)
+    inverse_target = qc.num_qubits - target - 1
+    inverse_control = qc.num_qubits - control - 1
+    qc.cx(inverse_control,inverse_target)
+    qc.rz(phi*2,inverse_target)
+    qc.cx(inverse_control,inverse_target)
     qc.barrier()
     
     return qc
@@ -309,6 +310,7 @@ class MyQAOA:
         else:
             self.x0 = np.random.random(layers*2)
         self.eval = self.eval_energy_all()
+        self.pauli = to_pauli_string(self.exp,self.size)
     
     def eval_energy_all(self):
         r"""
@@ -375,10 +377,14 @@ class MyQAOA:
         counts=job_result[0].data.meas.get_counts()
 
         # Using the formula from [1]
-        energy = 0
+        # energy = 0
+        # for key in counts:
+        #     energy+= (counts[key]/self.shots)*self.eval[key]
+        state = np.array([0]*(2**self.size),dtype=float)
         for key in counts:
-            energy+= (counts[key]/self.shots)*self.eval[key]
-        
+            state[int(key,2)] = np.sqrt(counts[key]/self.shots)
+        energy = state @ self.pauli.to_matrix().real @ state
+
         # Save circuit and counts
         if energy < self.min:
             self.qc = qc
