@@ -8,8 +8,9 @@ Después de esto, sería ver si esto funciona en el Qmio, y si no, ver como hace
 
 Los pasos serían:
 
-- [] Presentar TFG
-- [] Finalizar la presentación del congreso
-- [] Ir al congreso
+- [x] Presentar TFG
+- [x] Finalizar la presentación del congreso
+- [x] Ir al congreso
 - [] Pruebas en el Qmio
 - [] Paper
+- [] Probar a resolver esto cambiando la matriz a la matriz de distancia y resolviendo el max-cut default. Creo que esto tendría sentido sobre todo para el QAOA.

@@ -18,6 +18,7 @@ from qiskit_algorithms import QAOA
 from qiskit_algorithms.optimizers import COBYLA
 from qiskit.primitives import BackendSampler
 from qiskit.quantum_info import SparsePauliOp
+from qiskit_ibm_runtime import SamplerV2 as Sampler
 import re
 import dask
 import time
@@ -291,7 +292,7 @@ def get_energy_statevector(qc:QuantumCircuit,expression):
 
 class MyQAOA:    
     
-    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=[0.,0.],exact=False):
+    def __init__(self,exp:Union[str,SparsePauliOp],size:int,layers=1,method='COBYLA',shots=1024,x0=None,exact=False,backend=None):
         if type(exp) == str:
             self.exp = exp
         else:
@@ -305,7 +306,14 @@ class MyQAOA:
         self.counts = None
         self.exact = exact
         self.qc = None
-        if layers == len(x0)/2:
+        if backend:
+            self.backend = backend
+        else:
+            self.backend = AerSimulator()
+            
+        if x0 is None:
+            self.x0 = np.random.random(layers*2) 
+        elif layers == len(x0)/2:
             self.x0 = x0
         else:
             self.x0 = np.random.random(layers*2)
@@ -362,16 +370,13 @@ class MyQAOA:
         Returns:
             The energy value.
         """
-        
-        # Define the simulator, in a future version, this would be a parameter
-        sim = AerSimulator()
-        
+               
         # Transpile the circuit for the simulator or real QPU
         qc.measure_all()
-        qc = transpile(qc,sim)
+        qc = transpile(qc,self.backend)
 
         # Run the circuit and collect results
-        sampler = SamplerV2()
+        sampler = Sampler(self.backend)
         job = sampler.run([qc],shots=self.shots)
         job_result = job.result()
         counts=job_result[0].data.meas.get_counts()
@@ -522,7 +527,7 @@ def get_bes_sol(qc:QuantumCircuit)->dict:
     best = max(n_counts,key=n_counts.get)
     return best
 
-def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
+def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,backend=AerSimulator(),**kwargs):
     r"""
     Recursive function that uses QAOA to create the Phylogenetic tree using Ncut
     
@@ -570,11 +575,12 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
                 result = get_bes_sol(qc)
             else:
                 problem = prepare_exp(sub_mat,c=i)
-                qaoa = QAOA(problem,rows)
+                qaoa = MyQAOA(problem,rows,layers=1,backend=backend)
+                qaoa.get_min()
                 minim = qaoa.min
-                qaoa.get_opt_circ()
-                result = get_bes_sol(qaoa.qc)
-                    
+                counts = combine_inverse_keys(qaoa.counts)
+                result = max(counts,key=counts.get)
+
             # Time measurement
             if 'timer' in kwargs:
                 end = time.time_ns()/1000000
@@ -591,16 +597,16 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
     
     # Get the cuts created by the minimum ncut value
     index = np.argmin(ncuts)
-    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
     
     node = TreeNode(tags)
     
     # Recursivity in the first graph
     if len(n_graph_0[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index],timer=kwargs['timer']))
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index],client=client,backend=backend,timer=kwargs['timer']))
         else:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index]))
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_0[index],client=client,backend=backend))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -611,9 +617,9 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,**kwargs):
     # Recursivity in the first graph
     if len(n_graph_1[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index],timer=kwargs['timer']))
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index],client=client,backend=backend,timer=kwargs['timer']))
         else:
-            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index]))
+            node.children.append(qaoa_phylo_tree(matrix,tags=n_graph_1[index],client=client,backend=backend))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
