@@ -597,7 +597,7 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,backend=AerSimulator()
     
     # Get the cuts created by the minimum ncut value
     index = np.argmin(ncuts)
-    print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
     
     node = TreeNode(tags)
     
