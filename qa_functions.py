@@ -46,19 +46,19 @@ def compute_distance_matrix(sequences):
     
     n = len(sequences)
     distance_matrix = np.zeros((n, n))
+    bit = [0]*n
 
     for i in range(n):
-        for j in range(n):
-            if i == j:
-                distance_matrix[i, j] = 0  # Distance with itself is 0                
-            else:
-                sequences[i] = sequences[i].replace('-',"")
-                sequences[j] = sequences[j].replace('-',"")
-                score = aligner.score(sequences[i], sequences[j])
-                biti = aligner.score(sequences[i], sequences[i])
-                bitj = aligner.score(sequences[j], sequences[j])
-                # Convert score to a distance (example: max_score - score)
-                distance_matrix[i, j] = 100*score/np.mean([biti,bitj])  # Negative alignment score for distance
+        bit[i] = aligner.score(sequences[i], sequences[j])
+
+    for i in range(n):
+        for j in range(i):
+            sequences[i] = sequences[i].replace('-',"")
+            sequences[j] = sequences[j].replace('-',"")
+            score = aligner.score(sequences[i], sequences[j])
+            # Convert score to a distance (example: max_score - score)
+            distance_matrix[i, j] = 100*score/np.mean([bit[i],bit[j]])  
+            distance_matrix[j, i] = distance_matrix[i, j] # Symetrical matrix
 
     return distance_matrix
 
