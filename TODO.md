@@ -13,4 +13,9 @@ Los pasos serían:
 - [x] Ir al congreso
 - [] Pruebas en el Qmio
 - [] Paper
-- [] Probar a resolver esto cambiando la matriz a la matriz de distancia y resolviendo el max-cut default. Creo que esto tendría sentido sobre todo para el QAOA.
+  - [] Comparacion todo
+  - [x] Comparacion exacto
+  - [x] Comparacion arboles
+  - [ ] Conclusion
+  - [ ] Intro
+- [x] Probar a resolver esto cambiando la matriz a la matriz de distancia y resolviendo el max-cut default. Creo que esto tendría sentido sobre todo para el QAOA.
