@@ -165,3 +165,7 @@ slurm*
 
 # Token for IBM Quantum
 token.txt
+
+# Qmio files
+*.sh
+outputs
