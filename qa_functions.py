@@ -49,7 +49,7 @@ def compute_distance_matrix(sequences):
     bit = [0]*n
 
     for i in range(n):
-        bit[i] = aligner.score(sequences[i], sequences[j])
+        bit[i] = aligner.score(sequences[i], sequences[i])
 
     for i in range(n):
         for j in range(i):

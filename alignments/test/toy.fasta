@@ -1,8 +1,11 @@
->Chimp
+>A(Meerkat)
+AGGTACCTAC
+>B(Chimp)
 ACGTAGGCCT
->Human
+>C(Human)
 ATGTAAGACT
->Seal
+>D(Seal)
 TCGAGAGCAC
->Whale
+>E(Whale)
 TCGAAAGCAT
+
