@@ -393,7 +393,7 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
             problem = min_cut_c(sub_mat,c=i,alpha=alpha)
         else:
             problem = min_cut_c(sub_mat,tags=tags,c=i,alpha=alpha)
-        result = sampler.sample(problem, num_reads=32)
+        result = sampler.sample(problem, num_reads=32,label='PhyloTree Ncut')
         
         # Time measurement
         if 'timer' in kwargs:
