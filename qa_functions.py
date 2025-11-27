@@ -3,6 +3,7 @@ import dimod
 from dimod import BinaryQuadraticModel, BINARY
 from typing import Optional, Union
 from dwave.system import DWaveSampler, EmbeddingComposite
+from dwave.cloud import Client
 import time
 import matplotlib.pyplot as plt
 import sys
@@ -373,7 +374,13 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
     ncuts = []
     n_graph_0 = []
     n_graph_1 = []
-    sampler = EmbeddingComposite(DWaveSampler())
+    
+    with open('token.txt','r') as f:
+        TOKEN = f.read()
+        
+    sampler = EmbeddingComposite(
+        DWaveSampler(token=TOKEN, solver={"qpu":True, "topology__type":"zephyr"})
+    )
     
     if not tags:
         sub_mat = matrix
@@ -393,21 +400,25 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
             problem = min_cut_c(sub_mat,c=i,alpha=alpha)
         else:
             problem = min_cut_c(sub_mat,tags=tags,c=i,alpha=alpha)
-        result = sampler.sample(problem, num_reads=32,label='PhyloTree Ncut')
+        try:
+            result = sampler.sample(problem, num_reads=32,label='PhyloTree Ncut')
         
-        # Time measurement
-        if 'timer' in kwargs:
-            kwargs['timer'].update(result.info['timing']['qpu_access_time']/1000)
+            # Time measurement
+            if 'timer' in kwargs:
+                kwargs['timer'].update(result.info['timing']['qpu_access_time']/1000)
+                
+            n_graph_0.append([j for j in result.first.sample if result.first.sample[j]==0])
+            n_graph_1.append([j for j in result.first.sample if result.first.sample[j]==1])        
+            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
             
-        n_graph_0.append([j for j in result.first.sample if result.first.sample[j]==0])
-        n_graph_1.append([j for j in result.first.sample if result.first.sample[j]==1])        
-        # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
-        
-        if not n_graph_0[i-1] or not n_graph_1[i-1]:
-            n_graph_0.pop()
-            n_graph_1.pop()
-        else:
-            ncuts.append(n_cut(result.first.energy,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            if not n_graph_0[i-1] or not n_graph_1[i-1]:
+                n_graph_0.pop()
+                n_graph_1.pop()
+            else:
+                ncuts.append(n_cut(result.first.energy,n_graph_0[i-1],n_graph_1[i-1],matrix))
+        except Exception as e:
+            print("An error occurred during sampling:", str(e))
+            continue
         
     
     # Get the cuts created by the minimum ncut value
