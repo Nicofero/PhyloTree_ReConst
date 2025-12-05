@@ -128,7 +128,7 @@ class TreeNode:
                 next_prefix = prefix + ("    " if is_last else "│   ")
                 child.print_tree(prefix=next_prefix, is_last=(i == len(self.children) - 1))
     
-    def _newick_tree(self,exp=[""]):
+    def _newick_tree(self,exp=[""],labels=None):
         r"""
         Prints the tree structure with a visually appealing layout.
 
@@ -143,19 +143,22 @@ class TreeNode:
         if self.children:
             exp[0]+='('
             for child in self.children:             
-                child._newick_tree(exp)  
+                child._newick_tree(exp, labels)  
             exp[0]+='),'
         else:
-            exp[0]+=str(self.value)[1:-1]+','
+            if labels:
+                exp[0]+=str(labels[self.value[0]])+','
+            else:
+                exp[0]+=str(self.value)[1:-1]+','
             
-    def to_newick(self):
+    def to_newick(self,labels=None):
         exp = [""]
-        self._newick_tree(exp)
+        self._newick_tree(exp, labels)
         exp = re.sub(r",\s*\)", ")",exp[0])
         exp = re.sub(r",$", ";",exp)
         return exp
             
-    def create_newick_file(self,file_name:str='tree'):
+    def create_newick_file(self,file_name:str='tree',labels=None):
         r"""
         Creates a newick file from the chosen tree
         
@@ -164,7 +167,7 @@ class TreeNode:
             `file_name` (str): The name of the file to be written without extension
         """
         exp = [""]
-        self._newick_tree(exp)
+        self._newick_tree(exp,labels)
         exp = re.sub(r",\s*\)", ")",exp[0])
         exp = re.sub(r",$", ";",exp)
         with open(file_name,'w+') as file:
