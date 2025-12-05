@@ -8,7 +8,7 @@ file_names = os.listdir('./alignments')
 file_names.remove('test')
 
 for folder in file_names:
-    if int(folder) > 8 and int(folder) < 41:
+    if int(folder) > 99 and int(folder) < 130:
         files = os.listdir(f'./alignments/{folder}')
         for file in files:
             file_ext = re.search(r"_([0-9]+)\.",file).group(1)
