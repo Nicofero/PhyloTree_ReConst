@@ -169,3 +169,7 @@ token.txt
 # Qmio files
 *.sh
 outputs
+
+# Benchmark data
+benchmarking matrices/
+benchmarking_results/
