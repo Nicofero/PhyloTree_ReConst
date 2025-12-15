@@ -2,7 +2,7 @@ import numpy as np
 import dimod
 from dimod import BinaryQuadraticModel, BINARY
 from typing import Optional, Union
-from dwave.system import DWaveSampler, EmbeddingComposite
+from dwave.system import DWaveSampler, EmbeddingComposite, LeapHybridBQMSampler
 from dwave.cloud import Client
 import time
 import matplotlib.pyplot as plt
@@ -380,10 +380,15 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
     
     with open('token.txt','r') as f:
         TOKEN = f.read()
-        
-    sampler = EmbeddingComposite(
-        DWaveSampler(token=TOKEN, solver={"qpu":True, "topology__type":"zephyr"})
-    )
+    
+    if 'topology' in kwargs:
+        sampler = EmbeddingComposite(
+            DWaveSampler(token=TOKEN, solver={"qpu":True, "topology__type":"zephyr"}, cache = False)
+        )
+    else:
+        sampler = EmbeddingComposite(
+            DWaveSampler(token=TOKEN, solver={"qpu":True}, cache = False)
+        )
     
     if not tags:
         sub_mat = matrix
@@ -404,7 +409,10 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
         else:
             problem = min_cut_c(sub_mat,tags=tags,c=i,alpha=alpha)
         try:
-            result = sampler.sample(problem, num_reads=32,label='PhyloTree Ncut')
+            if "name" in kwargs:
+                result = sampler.sample(problem, num_reads=32,label=f'PhyloTree Ncut {kwargs["name"]} c={i}')
+            else:
+                result = sampler.sample(problem, num_reads=32,label=f'PhyloTree Ncut c={i}')
         
             # Time measurement
             if 'timer' in kwargs:
@@ -433,9 +441,9 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
     # Recursivity in the first graph
     if len(n_graph_0[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(phylo_tree(matrix,n_graph_0[index],timer=kwargs['timer']))
+            node.children.append(phylo_tree(matrix,n_graph_0[index],timer=kwargs['timer'],name=kwargs.get('name',''),topology=kwargs.get('topology','')))
         else:
-            node.children.append(phylo_tree(matrix,n_graph_0[index]))
+            node.children.append(phylo_tree(matrix,n_graph_0[index],name=kwargs.get('name',''),topology=kwargs.get('topology','')))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -446,9 +454,107 @@ def phylo_tree(matrix:np.ndarray,tags=[],**kwargs):
     # Recursivity in the first graph
     if len(n_graph_1[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(phylo_tree(matrix,n_graph_1[index],timer=kwargs['timer']))
+            node.children.append(phylo_tree(matrix,n_graph_1[index],timer=kwargs['timer'],name=kwargs.get('name',''),topology=kwargs.get('topology','')))
         else:
-            node.children.append(phylo_tree(matrix,n_graph_1[index]))
+            node.children.append(phylo_tree(matrix,n_graph_1[index],name=kwargs.get('name',''),topology=kwargs.get('topology','')))
+    else:
+        leaf = TreeNode(n_graph_1[index])
+        if len(n_graph_1[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_1[index][0]]))
+            leaf.children.append(TreeNode([n_graph_1[index][1]]))
+        node.children.append(leaf)
+    
+    return node
+
+# Recursive function that uses D-Wave QA to create the Phylogenetic tree using Ncut
+def hybrid_phylo_tree(matrix:np.ndarray,tags=[],sampler = None, **kwargs):
+    r"""
+    Recursive function that uses D-Wave QA to create the Phylogenetic tree using Ncut
+    
+    Args:
+        `matrix`: The matrix defining the graph.
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
+    Returns:
+        The `TreeNode` containing the full tree. 
+    """
+    
+    
+    ncuts = []
+    n_graph_0 = []
+    n_graph_1 = []
+    
+    
+    
+    if sampler is None:
+        with open('token.txt','r') as f:
+            TOKEN = f.read()
+        sampler = LeapHybridBQMSampler(token=TOKEN, cache = False)
+    
+    if not tags:
+        sub_mat = matrix
+    else:
+        sub_mat = matrix[np.ix_(tags, tags)]
+        
+    rows = sub_mat.shape[0]
+    
+    alpha = rows*100
+    
+    var = int(np.floor(rows/2.0))+1
+
+    # Run min_cut for each configuration
+    for i in range(1,var):
+        # print(f'Corte con {i}')
+        if not tags:
+            problem = min_cut_c(sub_mat,c=i,alpha=alpha)
+        else:
+            problem = min_cut_c(sub_mat,tags=tags,c=i,alpha=alpha)
+        try:
+            result = sampler.sample(problem,label=f'PhyloTree Ncut Hybrid {kwargs.get("name","")} c={i}')
+
+            # Time measurement
+            if 'timer' in kwargs:
+                kwargs['timer'].update(result.info['run_time']/1000)
+                
+            n_graph_0.append([j for j in result.first.sample if result.first.sample[j]==0])
+            
+            n_graph_1.append([j for j in result.first.sample if result.first.sample[j]==1])        
+            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+            
+            if not n_graph_0[i-1] or not n_graph_1[i-1]:
+                n_graph_0.pop()
+                n_graph_1.pop()
+            else:
+                ncuts.append(n_cut(result.first.energy,n_graph_0[i-1],n_graph_1[i-1],matrix))
+        except Exception as e:
+            print("An error occurred during sampling:", str(e))
+            continue
+        
+    
+    # Get the cuts created by the minimum ncut value
+    index = np.argmin(ncuts)
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    
+    node = TreeNode(tags)
+    
+    # Recursivity in the first graph
+    if len(n_graph_0[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(hybrid_phylo_tree(matrix,n_graph_0[index],timer=kwargs['timer'],name=kwargs.get('name','')))
+        else:
+            node.children.append(phylo_tree(matrix,n_graph_0[index],name=kwargs.get('name','')))
+    else:
+        leaf = TreeNode(n_graph_0[index])
+        if len(n_graph_0[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_0[index][0]]))
+            leaf.children.append(TreeNode([n_graph_0[index][1]]))
+        node.children.append(leaf)
+        
+    # Recursivity in the first graph
+    if len(n_graph_1[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(hybrid_phylo_tree(matrix,n_graph_1[index],timer=kwargs['timer'],name=kwargs.get('name','')))
+        else:
+            node.children.append(hybrid_phylo_tree(matrix,n_graph_1[index],name=kwargs.get('name','')))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:

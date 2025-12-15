@@ -169,6 +169,7 @@ token.txt
 # Qmio files
 *.sh
 outputs
+qa_big_trees_*.py
 
 # Benchmark data
 benchmarking matrices/
