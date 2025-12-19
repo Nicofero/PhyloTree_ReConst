@@ -173,4 +173,4 @@ qa_big_trees_*.py
 
 # Benchmark data
 benchmarking matrices/
-benchmarking_results/
+benchmarking_results/*/

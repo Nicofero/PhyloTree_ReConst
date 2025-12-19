@@ -1,3 +1,11 @@
+"""
+    Script Name: qa_functions.py
+    Author: Nicolás Fernández Otero
+    Creation date: 03/12/2024
+    Last update: 19/12/2025
+    Description: This script contains all the functions for the creation of Phylogenetic trees using a QA/hybrid approach for the optimization problem.
+"""
+
 import numpy as np
 import dimod
 from dimod import BinaryQuadraticModel, BINARY
