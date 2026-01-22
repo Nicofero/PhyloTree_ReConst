@@ -8,6 +8,7 @@
 
 import numpy as np
 import dimod
+import neal
 from dimod import BinaryQuadraticModel, BINARY
 from typing import Optional, Union
 from dwave.system import DWaveSampler, EmbeddingComposite, LeapHybridBQMSampler
@@ -549,7 +550,7 @@ def hybrid_phylo_tree(matrix:np.ndarray,tags=[],sampler = None, **kwargs):
         if 'timer' in kwargs:
             node.children.append(hybrid_phylo_tree(matrix,n_graph_0[index],timer=kwargs['timer'],name=kwargs.get('name','')))
         else:
-            node.children.append(phylo_tree(matrix,n_graph_0[index],name=kwargs.get('name','')))
+            node.children.append(hybrid_phylo_tree(matrix,n_graph_0[index],name=kwargs.get('name','')))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -563,6 +564,140 @@ def hybrid_phylo_tree(matrix:np.ndarray,tags=[],sampler = None, **kwargs):
             node.children.append(hybrid_phylo_tree(matrix,n_graph_1[index],timer=kwargs['timer'],name=kwargs.get('name','')))
         else:
             node.children.append(hybrid_phylo_tree(matrix,n_graph_1[index],name=kwargs.get('name','')))
+    else:
+        leaf = TreeNode(n_graph_1[index])
+        if len(n_graph_1[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_1[index][0]]))
+            leaf.children.append(TreeNode([n_graph_1[index][1]]))
+        node.children.append(leaf)
+    
+    return node
+
+def new_min_cut_c (matrix:np.ndarray,tags=[],c=0,alpha=0)->BinaryQuadraticModel:
+    
+    rows = matrix.shape[0]
+    # 1. Use variable labels (strings or ints), NOT dimod.Binary objects
+    if not tags:
+        labels = [i for i in range(rows)]
+    else:
+        labels = tags
+
+    # 2. Initialize a clean BQM
+    # Using the .from_qubo or manual construction is safer
+    obj = dimod.BinaryQuadraticModel(dimod.BINARY)
+
+    # 3. Add the terms
+    for i in range(rows):
+        for j in range(i):
+            coeff = float(matrix[i, j])
+            if coeff != 0:
+                # (xi - xj)^2 = xi + xj - 2xixj
+                # We use labels[i] (the name) instead of a Binary object
+                obj.add_variable(labels[i], coeff)
+                obj.add_variable(labels[j], coeff)
+                obj.add_interaction(labels[i], labels[j], -2.0 * coeff)
+
+    # 4. Add the constraint: alpha * (sum(x) - c)^2
+    # Expansion: alpha * (sum(xi) + 2*sum(xi*xj) - 2*c*sum(xi) + c^2)
+    for i in range(rows):
+        # Linear part: alpha * (1 - 2*c)
+        obj.add_variable(labels[i], alpha * (1 - 2 * c))
+        for j in range(i):
+            # Quadratic part: alpha * 2
+            obj.add_interaction(labels[i], labels[j], 2.0 * alpha)
+
+    # Offset doesn't affect the physics, but good for tracking energy
+    obj.offset += alpha * (c**2)
+    return obj
+
+# Recursive function that uses D-Wave Simulated Annealing to create the Phylogenetic tree using Ncut
+def sa_phylo_tree(matrix:np.ndarray,tags=[], **kwargs):
+    r"""
+    Recursive function that uses D-Wave Simulated Annealing to create the Phylogenetic tree using Ncut
+    
+    Args:
+        `matrix`: The matrix defining the graph.
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
+    Returns:
+        The `TreeNode` containing the full tree. 
+    """
+    
+    
+    ncuts = []
+    n_graph_0 = []
+    n_graph_1 = []
+    
+    
+    
+    sampler = neal.SimulatedAnnealingSampler()
+    
+    if not tags:
+        sub_mat = matrix
+    else:
+        sub_mat = matrix[np.ix_(tags, tags)]
+        
+    rows = sub_mat.shape[0]
+    
+    alpha = rows*100
+    
+    var = int(np.floor(rows/2.0))+1
+
+    # Run min_cut for each configuration
+    for i in range(1,var):
+        # print(f'Corte con {i}')
+        if not tags:
+            problem = min_cut_c(sub_mat,c=i,alpha=alpha)
+        else:
+            problem = min_cut_c(sub_mat,tags=tags,c=i,alpha=alpha)
+        try:
+            start = time.time_ns()
+            result = sampler.sample(problem,num_reads=100)
+            elapsed = time.time_ns() - start
+
+            # Time measurement
+            if 'timer' in kwargs:
+                kwargs['timer'].update(elapsed/1000000)
+                
+            n_graph_0.append([j for j in result.first.sample if result.first.sample[j]==0])
+            
+            n_graph_1.append([j for j in result.first.sample if result.first.sample[j]==1])        
+            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+            
+            if not n_graph_0[i-1] or not n_graph_1[i-1]:
+                n_graph_0.pop()
+                n_graph_1.pop()
+            else:
+                ncuts.append(n_cut(result.first.energy,n_graph_0[i-1],n_graph_1[i-1],matrix))
+        except Exception as e:
+            print("An error occurred during sampling:", str(e))
+            continue
+        
+    
+    # Get the cuts created by the minimum ncut value
+    index = np.argmin(ncuts)
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    
+    node = TreeNode(tags)
+    
+    # Recursivity in the first graph
+    if len(n_graph_0[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(sa_phylo_tree(matrix,n_graph_0[index],timer=kwargs['timer']))
+        else:
+            node.children.append(sa_phylo_tree(matrix,n_graph_0[index]))
+    else:
+        leaf = TreeNode(n_graph_0[index])
+        if len(n_graph_0[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_0[index][0]]))
+            leaf.children.append(TreeNode([n_graph_0[index][1]]))
+        node.children.append(leaf)
+        
+    # Recursivity in the first graph
+    if len(n_graph_1[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(sa_phylo_tree(matrix,n_graph_1[index],timer=kwargs['timer']))
+        else:
+            node.children.append(sa_phylo_tree(matrix,n_graph_1[index]))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
