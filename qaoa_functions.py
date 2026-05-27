@@ -10,17 +10,18 @@ from qiskit.quantum_info import SparsePauliOp,Statevector
 from typing import Union
 import numpy as np
 from qiskit import QuantumCircuit, transpile
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_aer import AerSimulator
-from qiskit_aer.primitives import SamplerV2
 from scipy.optimize import minimize
 from qa_functions import TreeNode,min_cut_c,n_cut,Timer
 from qiskit_algorithms import QAOA
 from qiskit_algorithms.optimizers import COBYLA
-from qiskit.primitives import BackendSampler
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_ibm_runtime import SamplerV2 as Sampler
+from qiskit_optimization.algorithms import MinimumEigenOptimizer
+from qiskit_optimization.translators import from_ising
+from qiskit_optimization import QuadraticProgram
 import re
-import dask
 import time
 
 import warnings
@@ -250,7 +251,7 @@ def get_energy(qc:QuantumCircuit,expression,shots=1024):
     qc = transpile(qc,sim)
 
     # Run the circuit and collect results
-    sampler = SamplerV2()
+    sampler = Sampler(mode = AerSimulator())
     job = sampler.run([qc],shots=shots)
     job_result = job.result()
     counts=job_result[0].data.meas.get_counts()
@@ -470,7 +471,7 @@ def prepare_exp(matrix:np.ndarray,c=0):
     """
     
     
-    alpha = matrix.shape[0]*1000
+    alpha = matrix.shape[0]*100
     h, J, _ = min_cut_c(matrix,c=c,alpha=alpha).to_ising()
     # print(f'Linar coeffs: {h}')
     # print(f'Quadratic terms: {J}')
@@ -519,7 +520,7 @@ def get_bes_sol(qc:QuantumCircuit)->dict:
     qc = transpile(qc,sim)
 
     # Run the circuit and collect results
-    sampler = SamplerV2()
+    sampler = Sampler(mode = AerSimulator())
     job = sampler.run([qc],shots=2048)
     job_result = job.result()
     counts=job_result[0].data.meas.get_counts()
@@ -630,6 +631,29 @@ def qaoa_phylo_tree(matrix:np.ndarray,tags=[],client=None,backend=AerSimulator()
     return node
 
 
+def bqm_to_quadratic_program(bqm) -> QuadraticProgram:
+    # Ensure BINARY vartype (not SPIN)
+    bqm_binary = bqm.change_vartype("BINARY", inplace=False)
+
+    qp = QuadraticProgram()
+
+    # Add binary variables
+    for var in bqm_binary.variables:
+        qp.binary_var(str(var))
+
+    # Build linear and quadratic dicts
+    linear    = {str(v): bias for v, bias in bqm_binary.linear.items()}
+    quadratic = {(str(u), str(v)): bias for (u, v), bias in bqm_binary.quadratic.items()}
+
+    # Set objective (BQMs are minimization problems)
+    qp.minimize(
+        linear=linear,
+        quadratic=quadratic,
+        constant=bqm_binary.offset
+    )
+
+    return qp
+
 def to_pauli_string(expr: str,size: int) -> SparsePauliOp:
     """Convert a string expression to a SparsePauliOp.
     
@@ -660,7 +684,7 @@ def to_pauli_string(expr: str,size: int) -> SparsePauliOp:
         pauli_terms.append((pauli_string, coeffs[0]))
     return SparsePauliOp.from_list(pauli_terms)
 
-def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kwargs):
+def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),layers = 1,**kwargs):
     r"""
     Recursive function that uses QAOA to create the Phylogenetic tree using Ncut
     
@@ -680,9 +704,17 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
         
     rows = sub_mat.shape[0]
     
+    alpha = rows *300
+    
     var = int(np.floor(rows/2.0))+1
     
-    sampler = BackendSampler(backend=backend)    
+    sampler = Sampler(mode=backend)    
+    
+    pm = generate_preset_pass_manager(optimization_level=3, backend=backend)
+    
+    qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=300), reps=layers, transpiler=pm)
+                
+    eigen_optimizer = MinimumEigenOptimizer(min_eigen_solver = qaoa)
     
     while not ncuts:
         
@@ -693,20 +725,21 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
             # print(f'Corte con {i}')
             if 'timer' in kwargs:
                 start = time.time_ns()/1000000
-                # Prepare the expression and run the QAOA    
-            problem = prepare_exp(sub_mat,c=i)
-            pstring = to_pauli_string(problem,rows)
-            # Repeat until a cut is found
-            result = '0'*rows
-            while result == '0'*rows or result == '1'*rows:
-                qaoa = QAOA(sampler=sampler, optimizer=COBYLA(maxiter=500), reps=1)
+            # Prepare the expression and run the QAOA    
+            problem = min_cut_c(sub_mat,c=i,alpha=alpha)            
+            
+            qp = bqm_to_quadratic_program(problem)
 
-                # Compute the minimum eigenvalue (i.e., approximate ground state)
-                rest = qaoa.compute_minimum_eigenvalue(pstring)
+            # # Repeat until a cut is found
+            # result = '0'*rows
+            # while result == '0' * rows or result == '1' * rows:
+                
+            # Compute the minimum eigenvalue (i.e., approximate ground state)
+            rest = eigen_optimizer.solve(qp)
 
-                # Extract the measurement distribution
-                result = rest.best_measurement['bitstring']
-                minim = rest.eigenvalue.real
+            # Extract the measurement distribution
+            result = [str(int(x)) for x in rest.x]
+            minim = rest.fval
                     
             # Time measurement
             if 'timer' in kwargs:
@@ -716,6 +749,8 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
             n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
             n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
             # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+            
+            # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
             
             if n_graph_0[i-1] and n_graph_1[i-1]:
                 ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
@@ -730,9 +765,9 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
     # Recursivity in the first graph
     if len(n_graph_0[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,timer=kwargs['timer']))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,layers=layers,timer=kwargs['timer']))
         else:
-            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,layers=layers))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -743,9 +778,9 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
     # Recursivity in the first graph
     if len(n_graph_1[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,timer=kwargs['timer']))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,layers=layers,timer=kwargs['timer']))
         else:
-            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend))
+            node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,layers=layers))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
