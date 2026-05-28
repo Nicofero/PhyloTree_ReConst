@@ -10,6 +10,7 @@ from qiskit.quantum_info import SparsePauliOp,Statevector
 from typing import Union
 import numpy as np
 from qiskit import QuantumCircuit, transpile
+from qiskit.circuit.library import real_amplitudes
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_aer import AerSimulator
 from scipy.optimize import minimize
@@ -21,6 +22,15 @@ from qiskit_ibm_runtime import SamplerV2 as Sampler
 from qiskit_optimization.algorithms import MinimumEigenOptimizer
 from qiskit_optimization.translators import from_ising
 from qiskit_optimization import QuadraticProgram
+from qiskit_aer.primitives import EstimatorV2 as AerEstimator
+from qiskit_aer.primitives import SamplerV2 as AerSampler
+from qiskit_optimization.algorithms.qrao import (
+    QuantumRandomAccessEncoding,
+    QuantumRandomAccessOptimizer,
+    MagicRounding,
+    SemideterministicRounding,
+)
+from qiskit_optimization.minimum_eigensolvers import VQE
 import re
 import time
 
@@ -777,6 +787,401 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),laye
             node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,layers=layers,timer=kwargs['timer']))
         else:
             node.children.append(qaoa_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,layers=layers))
+    else:
+        leaf = TreeNode(n_graph_1[index])
+        if len(n_graph_1[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_1[index][0]]))
+            leaf.children.append(TreeNode([n_graph_1[index][1]]))
+        node.children.append(leaf)
+    
+    return node
+
+##################################################      
+#         ____  _____            ____            #
+#        / __ \|  __ \     /\   / __ \           #
+#       | |  | | |__) |   /  \ | |  | |          #
+#       | |  | |  _  /   / /\ \| |  | |          #
+#       | |__| | | \ \  / ____ \ |__| |          #
+#        \___\_\_|  \_\/_/    \_\____/           #
+#                                                #
+##################################################
+
+def min_cut_qp(matrix: np.ndarray, tags=[]) -> QuadraticProgram:
+    r"""
+    Creates a QuadraticProgram from a numpy matrix using the Min-cut formulation.
+    Both symmetrical matrices and matrices with 0 above the main diagonal work.
+
+    Objective (minimise):
+        sum_{i>j} w_ij * (x_i - x_j)^2
+        = sum_{i>j} w_ij * (x_i + x_j - 2*x_i*x_j)    [since x_i^2 = x_i for binary]
+
+    Args:
+        matrix: NxN weight matrix defining the problem.
+        tags:   Optional variable names. Defaults to "0", "1", ..., "N-1".
+
+    Returns:
+        QuadraticProgram encoding the min-cut objective.
+    """
+    rows = matrix.shape[0]
+    qp = QuadraticProgram()
+
+    var_names = [str(t) for t in tags] if tags else [str(i) for i in range(rows)]
+
+    for name in var_names:
+        qp.binary_var(name)
+
+    linear = {}
+    quadratic = {}
+
+    for i in range(rows):
+        for j in range(i):          # lower triangle only — handles both symmetric
+            w = matrix[i, j]        # and upper-triangle-zero matrices correctly
+            if w == 0:
+                continue
+
+            # Linear part: w*(x_i + x_j)
+            linear[var_names[i]] = linear.get(var_names[i], 0) + w
+            linear[var_names[j]] = linear.get(var_names[j], 0) + w
+
+            # Quadratic part: -2w * x_i * x_j
+            key = (var_names[i], var_names[j])
+            quadratic[key] = quadratic.get(key, 0) - 2 * w
+
+    qp.minimize(linear=linear, quadratic=quadratic)
+    return qp
+
+import numpy as np
+from scipy import stats
+
+def threshold_similarity_matrix(W: np.ndarray, method: str = "otsu") -> tuple[np.ndarray, float]:
+    """
+    Sparsify a similarity matrix by zeroing out edges below a data-driven threshold.
+    
+    Args:
+        W:      Symmetric similarity matrix (NxN), diagonal ignored.
+        method: One of "otsu", "percentile", "zscore", "knee"
+    
+    Returns:
+        W_sparse: Thresholded matrix
+        threshold: The threshold value used
+    """
+    # Extract upper-triangle values (avoid diagonal and duplicate edges)
+    idx = np.triu_indices_from(W, k=1)
+    weights = W[idx]
+
+    if method == "otsu":
+        threshold = _otsu_threshold(weights)
+
+    elif method == "percentile":
+        # Keep the top 50% of edges by default — adjust as needed
+        threshold = np.percentile(weights, 50)
+
+    elif method == "zscore":
+        # Zero out anything more than 1 std below the mean
+        threshold = weights.mean() - weights.std()
+
+    elif method == "knee":
+        threshold = _knee_threshold(weights)
+
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+    # Apply threshold symmetrically
+    W_sparse = W.copy()
+    W_sparse[W_sparse < threshold] = 0
+    np.fill_diagonal(W_sparse, 0)  # Nodes don't connect to themselves in QRAO
+    return W_sparse, threshold
+
+
+def _otsu_threshold(values: np.ndarray) -> float:
+    """
+    Otsu's method: finds the threshold that minimises intra-class variance.
+    Works well when similarity values are bimodal (a cluster of weak edges
+    and a cluster of strong edges).
+    """
+    bins = 256
+    counts, bin_edges = np.histogram(values, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    total = counts.sum()
+
+    best_thresh, best_var = 0, -1
+    w0_sum = 0
+    mu0_sum = 0
+
+    for i in range(1, bins):
+        w0 = counts[:i].sum() / total
+        w1 = 1 - w0
+        if w0 == 0 or w1 == 0:
+            continue
+        mu0 = (counts[:i] * bin_centers[:i]).sum() / (counts[:i].sum() + 1e-12)
+        mu1 = (counts[i:] * bin_centers[i:]).sum() / (counts[i:].sum() + 1e-12)
+        between_var = w0 * w1 * (mu0 - mu1) ** 2
+        if between_var > best_var:
+            best_var = between_var
+            best_thresh = bin_centers[i]
+
+    return best_thresh
+
+
+def _knee_threshold(values: np.ndarray) -> float:
+    """
+    Knee/elbow detection on the sorted weight curve.
+    Finds where the curve bends — a natural 'drop-off' point.
+    """
+    sorted_vals = np.sort(values)[::-1]  # Descending
+    n = len(sorted_vals)
+    x = np.linspace(0, 1, n)
+
+    # Normalise
+    y = (sorted_vals - sorted_vals.min()) / (sorted_vals.max() - sorted_vals.min() + 1e-12)
+
+    # Distance from each point to the line connecting first and last
+    line_vec = np.array([x[-1] - x[0], y[-1] - y[0]])
+    line_vec /= np.linalg.norm(line_vec)
+    point_vecs = np.stack([x - x[0], y - y[0]], axis=1)
+    distances = np.abs(np.cross(line_vec, point_vecs))
+    knee_idx = np.argmax(distances)
+
+    return sorted_vals[knee_idx]
+
+def _eval(qp: QuadraticProgram, x: np.ndarray) -> float:
+    """Evaluate the QP objective at a binary vector."""
+    return qp.objective.evaluate(x)
+
+
+def _project_to_cardinality(
+    x: np.ndarray, c: int, qp: QuadraticProgram
+) -> tuple[np.ndarray, float]:
+    """
+    Greedily flip bits one at a time until exactly c are 1,
+    choosing each flip to keep the objective as low as possible.
+    """
+    x = x.copy().astype(float)
+
+    while int(x.sum()) != c:
+        excess = int(x.sum()) - c          # positive → too many 1s
+        candidates = np.where(x == (1 if excess > 0 else 0))[0]
+        target_value = 0.0 if excess > 0 else 1.0
+
+        best_idx = min(
+            candidates,
+            key=lambda idx: _eval(qp, np.where(
+                np.arange(len(x)) == idx, target_value, x
+            )),
+        )
+        x[best_idx] = target_value
+
+    return x, _eval(qp, x)
+
+
+def _best_with_cardinality(
+    samples, c: int, qp: QuadraticProgram
+) -> tuple[np.ndarray, float]:
+    """
+    Return the best solution with exactly c ones.
+
+    Strategy:
+      1. Filter samples that already satisfy the constraint → pick best fval.
+      2. If none exist, project every sample to cardinality c and pick best.
+    """
+    feasible = [s for s in samples if int(s.x.sum()) == c]
+
+    if feasible:
+        best = min(feasible, key=lambda s: s.fval)   # minimisation → lowest fval
+        return best.x.copy().astype(float), float(best.fval)
+
+    # No sample satisfies the constraint: project all and keep the best
+    best_x, best_fval = None, float("inf")
+    for sample in samples:
+        x_proj, fval = _project_to_cardinality(sample.x, c, qp)
+        if fval < best_fval:
+            best_fval = fval
+            best_x = x_proj
+
+    return best_x, best_fval
+
+
+# ── main function ──────────────────────────────────────────────────────────────
+
+def run_qrao_min_cut(
+    matrix: np.ndarray,
+    c: int,
+    sparsity_method = "zscore", # "zscore" | "otsu" | "knee" | "percentile"
+    tags: list = [],
+    max_vars_per_qubit: int = 3,
+    rounding: str = "magic",   # "magic" | "semideterministic"
+    shots: int = 10_000,
+    seed: int = 42,
+) -> dict:
+    """
+    Solve a min-cut problem with QRAO, post-processing the result
+    to enforce exactly c variables equal to 1.
+
+    Args:
+        matrix:             NxN weight matrix (symmetric or lower-triangle).
+        c:                  Required number of selected assets (ones in solution).
+        tags:               Optional variable names; defaults to "0".."N-1".
+        max_vars_per_qubit: QRAC compression level (1, 2, or 3).
+        rounding:           "magic" (multiple samples) or "semideterministic".
+        shots:              Number of magic rounding shots.
+        seed:               RNG seed for reproducibility.
+
+    Returns:
+        dict with keys:
+            x                — binary solution array with exactly c ones
+            fval             — objective value at x
+            raw_result       — full QuantumRandomAccessOptimizationResult
+            num_qubits       — qubits used after compression
+            compression_ratio
+            feasible_found   — whether any sample satisfied the constraint directly
+    """
+    # ── 1. Sparsify the matrix and build the QUBO ──────────────────────────────────────────────────────
+    W_sparse,thresh = threshold_similarity_matrix(matrix, method=sparsity_method)
+    
+    qp = min_cut_qp(W_sparse,tags)
+
+    # ── 2. Encode ──────────────────────────────────────────────────────────────
+    encoding = QuantumRandomAccessEncoding(max_vars_per_qubit=max_vars_per_qubit)
+    encoding.encode(qp)
+    # print(
+    #     f"Encoding: {encoding.num_vars} variables → {encoding.num_qubits} qubits "
+    #     f"(compression {encoding.compression_ratio:.2f}x)"
+    # )
+
+    # ── 3. Solver (VQE) ────────────────────────────────────────────────────────
+    pm = generate_preset_pass_manager(optimization_level=3, backend=AerSimulator())
+    estimator = AerEstimator(
+                        options={
+                            "backend_options": {
+                                "method": "statevector",   # exact simulation — same as StatevectorEstimator
+                                "device": "CPU",           # swap to "GPU" if you have a CUDA-capable card
+                                "max_parallel_threads": 0, # 0 = use all available cores
+                            }
+                        }
+)
+    ansatz = real_amplitudes(encoding.num_qubits)
+    vqe = VQE(ansatz=ansatz, optimizer=COBYLA(maxiter=300), estimator=estimator, pass_manager= pm)
+
+    # ── 4. Rounding scheme ─────────────────────────────────────────────────────
+    if rounding == "magic":
+        sampler = AerSampler(
+                    options={
+                        "backend_options": {
+                            "method": "statevector"
+                        }
+                    }
+                )
+        rounding_scheme = MagicRounding(sampler=sampler, pass_manager=pm)
+    elif rounding == "semideterministic":
+        rounding_scheme = SemideterministicRounding()
+    else:
+        raise ValueError(f"Unknown rounding '{rounding}'. Use 'magic' or 'semideterministic'.")
+
+    # ── 5. Solve ───────────────────────────────────────────────────────────────
+    qrao = QuantumRandomAccessOptimizer(
+        min_eigen_solver=vqe,
+        rounding_scheme=rounding_scheme,
+    )
+    raw_result = qrao.solve(qp)
+
+    # ── 6. Post-process: enforce exactly c ones ────────────────────────────────
+    feasible_found = any(int(s.x.sum()) == c for s in raw_result.samples)
+    x, fval = _best_with_cardinality(raw_result.samples, c, qp)
+
+    if not feasible_found:
+        print(
+            f"No sample had exactly {c} ones — "
+            f"projected best sample to cardinality {c}."
+        )
+
+    return {
+        "x":                  x,
+        "fval":               fval,
+        "raw_result":         raw_result,
+        "num_qubits":         encoding.num_qubits,
+        "compression_ratio":  encoding.compression_ratio,
+        "feasible_found":     feasible_found,
+    }
+
+
+
+def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kwargs):
+    r"""
+    Recursive function that uses QRAO to create the Phylogenetic tree using Ncut
+    
+    Args:
+        `matrix`: The matrix defining the graph.
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
+    Returns:
+        The `TreeNode` containing the full tree. 
+    """
+    ncuts = []
+    
+    if not tags:
+        sub_mat = matrix
+        tags = list(range(matrix.shape[0]))
+    else:
+        sub_mat = matrix[np.ix_(tags, tags)]
+        
+    rows = sub_mat.shape[0]
+    
+    var = int(np.floor(rows/2.0))+1
+    
+    while not ncuts:
+        
+        n_graph_0 = []
+        n_graph_1 = []
+        # Run min_cut for each configuration
+        for i in range(1,var):
+            # print(f'Corte con {i}')
+            if 'timer' in kwargs:
+                start = time.time_ns()/1000000
+            # Prepare the expression and run the QRAO    
+            res = run_qrao_min_cut(sub_mat,c = i)
+            
+            result = [str(int(x)) for x in res['x']]
+            minim = res['fval']
+                    
+            # Time measurement
+            if 'timer' in kwargs:
+                end = time.time_ns()/1000000
+                kwargs['timer'].update(end-start)
+                
+            n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
+            n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
+            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+            
+            # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            
+            if n_graph_0[i-1] and n_graph_1[i-1]:
+                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+                
+    
+    # Get the cuts created by the minimum ncut value
+    index = np.argmin(ncuts)
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    
+    node = TreeNode(tags)
+    
+    # Recursivity in the first graph
+    if len(n_graph_0[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,timer=kwargs['timer']))
+        else:
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,))
+    else:
+        leaf = TreeNode(n_graph_0[index])
+        if len(n_graph_0[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_0[index][0]]))
+            leaf.children.append(TreeNode([n_graph_0[index][1]]))
+        node.children.append(leaf)
+        
+    # Recursivity in the first graph
+    if len(n_graph_1[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,timer=kwargs['timer']))
+        else:
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
