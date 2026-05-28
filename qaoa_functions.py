@@ -729,10 +729,6 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),laye
             problem = min_cut_c(sub_mat,c=i,alpha=alpha)            
             
             qp = bqm_to_quadratic_program(problem)
-
-            # # Repeat until a cut is found
-            # result = '0'*rows
-            # while result == '0' * rows or result == '1' * rows:
                 
             # Compute the minimum eigenvalue (i.e., approximate ground state)
             rest = eigen_optimizer.solve(qp)
