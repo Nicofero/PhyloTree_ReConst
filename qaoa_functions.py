@@ -1056,6 +1056,7 @@ def run_qrao_min_cut(
                                 "method": "statevector",   # exact simulation — same as StatevectorEstimator
                                 "device": "CPU",           # swap to "GPU" if you have a CUDA-capable card
                                 "max_parallel_threads": 0, # 0 = use all available cores
+                                "max_parallel_experiments": 0,
                             }
                         }
 )
@@ -1067,7 +1068,9 @@ def run_qrao_min_cut(
         sampler = AerSampler(
                     options={
                         "backend_options": {
-                            "method": "statevector"
+                            "method": "statevector",
+                            "max_parallel_threads": 0, # 0 = use all available cores
+                            "max_parallel_experiments": 0,
                         }
                     }
                 )
