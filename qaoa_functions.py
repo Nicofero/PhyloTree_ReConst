@@ -10,7 +10,7 @@ from qiskit.quantum_info import SparsePauliOp,Statevector
 from typing import Union
 import numpy as np
 from qiskit import QuantumCircuit, transpile
-from qiskit.circuit.library import real_amplitudes
+from qiskit.circuit.library import real_amplitudes, efficient_su2
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_aer import AerSimulator
 from scipy.optimize import minimize
@@ -33,6 +33,8 @@ from qiskit_optimization.algorithms.qrao import (
 from qiskit_optimization.minimum_eigensolvers import VQE
 import re
 import time
+from itertools import combinations
+from scipy.optimize import minimize, OptimizeResult
 
 import warnings
 import functools
@@ -1185,6 +1187,265 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
             node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,timer=kwargs['timer']))
         else:
             node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,))
+    else:
+        leaf = TreeNode(n_graph_1[index])
+        if len(n_graph_1[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_1[index][0]]))
+            leaf.children.append(TreeNode([n_graph_1[index][1]]))
+        node.children.append(leaf)
+    
+    return node
+
+############################################
+#           _____   _____ ______           #
+#          |  __ \ / ____|  ____|          #
+#          | |__) | |    | |__             #
+#          |  ___/| |    |  __|            #
+#          | |    | |____| |____           #
+#          |_|     \_____|______|          #
+#                                          #
+############################################
+
+def build_pauli_correlation_encoding(pauli, node_list, n, k=2):
+    pauli_correlation_encoding = []
+    for idx, c in enumerate(combinations(range(n), k)):
+        if idx >= len(node_list):
+            break
+        paulis = ["I"] * n
+        paulis[c[0]], paulis[c[1]] = pauli, pauli
+        pauli_correlation_encoding.append(("".join(paulis)[::-1], 1))
+
+    hamiltonian = []
+    for pauli, weight in pauli_correlation_encoding:
+        hamiltonian.append(SparsePauliOp.from_list([(pauli, weight)]))
+
+    return hamiltonian
+
+def loss_func_estimator(x, ansatz, hamiltonian, estimator, matrix, c, experiment_result, alpha=None):
+    """
+    Loss function (eq. 12):
+
+      L = sum_{i<j} (1/2) * d_ij * [1 - tanh(α<Πi>) * tanh(α<Πj>)]
+        + β * [sum_i tanh(α<Πi>) - (n - 2c)]^2
+
+    Args:
+        x:          Ansatz parameters.
+        hamiltonian: List of 3 Pauli observables from the PCE encoding.
+        matrix:     NxN weight matrix (symmetric or lower-triangular).
+        c:          Target cardinality — number of assets to select.
+        alpha:      Sharpness of tanh. Defaults to n.
+        beta:       Weight of the cardinality penalty term.
+    """
+    n = matrix.shape[0]
+    beta = n *100
+    alpha = alpha if alpha is not None else float(n)
+
+    # ── Run estimator ──────────────────────────────────────────────────────────
+    job = estimator.run([
+        (ansatz, hamiltonian[0], x),
+        (ansatz, hamiltonian[1], x),
+        (ansatz, hamiltonian[2], x),
+    ])
+    result = job.result()
+
+    node_exp_map = {}
+    idx = 0
+    for r in result:
+        for ev in r.data.evs:
+            node_exp_map[idx] = ev
+            idx += 1
+
+    # ── tanh(α <Πi>) for every node ───────────────────────────────────────────
+    tanh_vals = np.array([np.tanh(alpha * node_exp_map[i]) for i in range(n)])
+
+    # ── Normalise matrix to handle both symmetric and lower-triangular input ──
+    # np.maximum picks the non-zero side regardless of convention,
+    # then triu extracts each pair (i < j) exactly once.
+    W = np.triu(np.maximum(matrix, matrix.T), k=1)   # shape (n, n), upper triangle
+
+    # ── Term 1: (1/2) * d_ij * [1 - tanh_i * tanh_j] summed over i < j ──────
+    tanh_outer = np.outer(tanh_vals, tanh_vals)       # (n, n)  tanh_i * tanh_j
+    term1 = 0.5 * np.sum(W * (1.0 - tanh_outer))
+
+    # ── Term 2: β * [Σ tanh_i  −  (n − 2c)]^2 ───────────────────────────────
+    term2 = beta * (np.sum(tanh_vals) - (n - 2 * c)) ** 2
+
+    loss = float(term1 + term2)
+
+    # global experiment_result
+    # print(f"Iter {len(experiment_result):4d}: loss={loss:.6f}  "
+    #       f"term1={float(term1):.4f}  term2={float(term2):.4f}")
+    experiment_result.append({"loss": loss, "exp_map": node_exp_map})
+
+    return loss
+
+
+def get_result(experiment_result):
+    result = []
+    best_index = min(
+        range(len(experiment_result)),
+        key=lambda i: experiment_result[i]["loss"],
+    )
+    for i in experiment_result[best_index]["exp_map"]:
+        if experiment_result[best_index]["exp_map"][i] >= 0:
+            result.append('0')
+        else:
+            result.append('1')
+    return result
+
+def generate_circuit(matrix: np.ndarray, pm) -> list:
+    num_nodes = matrix.shape[0]
+
+    num_qubits = int(np.ceil((1 + np.sqrt(1 + (8 / 3) * num_nodes)) / 2))
+
+    list_size = num_nodes // 3
+    node_x = [i for i in range(list_size)]
+    node_y = [i for i in range(list_size, 2 * list_size)]
+    node_z = [i for i in range(2 * list_size, num_nodes)]
+
+    pauli_correlation_encoding_x = build_pauli_correlation_encoding(
+        "X", node_x, num_qubits
+    )
+    pauli_correlation_encoding_y = build_pauli_correlation_encoding(
+        "Y", node_y, num_qubits
+    )
+    pauli_correlation_encoding_z = build_pauli_correlation_encoding(
+        "Z", node_z, num_qubits
+    )
+
+    qc = efficient_su2(num_qubits, su2_gates=["ry", "rz"], reps=2)
+    qc = pm.run(qc)
+
+    pce = []
+    pce.append(
+        [op.apply_layout(qc.layout) for op in pauli_correlation_encoding_x]
+    )
+    pce.append(
+        [op.apply_layout(qc.layout) for op in pauli_correlation_encoding_y]
+    )
+    pce.append(
+        [op.apply_layout(qc.layout) for op in pauli_correlation_encoding_z]
+    )
+
+    return qc, pce
+
+def run_pce_min_cut(matrix: np.ndarray, qc: QuantumCircuit, pce: list, estimator, c: int, seed = 42, max_iter = 50, alpha = 10):    
+
+    counter = {"i": 0}
+    last_x = {"value": None}
+    last_fun = {"value": None}
+    exp_rslt = []
+
+    def loss_func(x):
+        last_x["value"] = x.copy()
+        if counter["i"] + 1 > max_iter:
+            return last_fun["value"]
+        counter["i"] += 1
+        val = loss_func_estimator(
+            x, qc, pce, estimator, matrix,experiment_result=exp_rslt, c = c, alpha= alpha
+        )
+        last_fun["value"] = val
+        return val
+
+    np.random.seed(seed)
+    initial_params = np.random.rand(qc.num_parameters)
+    
+    result = minimize(
+        loss_func, initial_params, method="COBYLA", options={"rhobeg": 1.0}
+    )
+
+    if counter["i"] >= max_iter:
+        result = OptimizeResult(
+            message=f"Return from COBYLA because the objective function has been evaluated {max_iter} times.",
+            success=False,
+            status=3,
+            fun=last_fun["value"],
+            x=last_x["value"],
+            nfev=counter["i"],
+        )
+    
+    result.x = get_result(exp_rslt)
+    return result
+
+def pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**kwargs):
+    r"""
+    Recursive function that uses QRAO to create the Phylogenetic tree using Ncut
+    
+    Args:
+        `matrix`: The matrix defining the graph.
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
+    Returns:
+        The `TreeNode` containing the full tree. 
+    """
+    ncuts = []
+    
+    if not tags:
+        sub_mat = matrix
+        tags = list(range(matrix.shape[0]))
+    else:
+        sub_mat = matrix[np.ix_(tags, tags)]
+        
+    rows = sub_mat.shape[0]
+    
+    var = int(np.floor(rows/2.0))+1
+    pm = generate_preset_pass_manager(optimization_level=3,backend=AerSimulator())
+    qc, pce = generate_circuit(sub_mat,pm)
+    while not ncuts:
+        
+        n_graph_0 = []
+        n_graph_1 = []
+        
+        # Run min_cut for each configuration
+        for i in range(1,var):
+            # print(f'Corte con {i}')
+            if 'timer' in kwargs:
+                start = time.time_ns()/1000000
+            # Prepare the expression and run the QRAO    
+            res = run_pce_min_cut(sub_mat,qc,pce,estimator,c=i)
+
+            result = res.x
+            minim = res.fun
+                    
+            # Time measurement
+            if 'timer' in kwargs:
+                end = time.time_ns()/1000000
+                kwargs['timer'].update(end-start)
+                
+            n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
+            n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
+            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+            
+            # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            
+            if n_graph_0[i-1] and n_graph_1[i-1]:
+                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+                
+    
+    # Get the cuts created by the minimum ncut value
+    index = np.argmin(ncuts)
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    
+    node = TreeNode(tags)
+    
+    # Recursivity in the first graph
+    if len(n_graph_0[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(pce_phylo_tree_qiskit(matrix,tags=n_graph_0[index],estimator=estimator,timer=kwargs['timer']))
+        else:
+            node.children.append(pce_phylo_tree_qiskit(matrix,tags=n_graph_0[index],estimator=estimator,))
+    else:
+        leaf = TreeNode(n_graph_0[index])
+        if len(n_graph_0[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_0[index][0]]))
+            leaf.children.append(TreeNode([n_graph_0[index][1]]))
+        node.children.append(leaf)
+        
+    # Recursivity in the first graph
+    if len(n_graph_1[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(pce_phylo_tree_qiskit(matrix,tags=n_graph_1[index],estimator=estimator,timer=kwargs['timer']))
+        else:
+            node.children.append(pce_phylo_tree_qiskit(matrix,tags=n_graph_1[index],estimator=estimator))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
