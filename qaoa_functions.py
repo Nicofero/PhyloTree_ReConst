@@ -716,7 +716,7 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),laye
         
     rows = sub_mat.shape[0]
     
-    alpha = rows *300
+    alpha = rows *500
     
     var = int(np.floor(rows/2.0))+1
     
@@ -741,13 +741,21 @@ def qaoa_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),laye
             problem = min_cut_c(sub_mat,c=i,alpha=alpha)            
             
             qp = bqm_to_quadratic_program(problem)
+            
+            try:
                 
-            # Compute the minimum eigenvalue (i.e., approximate ground state)
-            rest = eigen_optimizer.solve(qp)
+                # Compute the minimum eigenvalue (i.e., approximate ground state)
+                rest = eigen_optimizer.solve(qp)
 
-            # Extract the measurement distribution
-            result = [str(int(x)) for x in rest.x]
-            minim = rest.fval
+                # Extract the measurement distribution
+                result = [str(int(x)) for x in rest.x]
+                minim = rest.fval
+            except:
+                # Cut using qaoa directly
+                rest = qaoa.compute_minimum_eigenvalue(qp.to_ising()[0])
+                
+                result = rest.best_measurement['bitstring']
+                minim = rest.eigenvalue.real
                     
             # Time measurement
             if 'timer' in kwargs:
@@ -851,9 +859,6 @@ def min_cut_qp(matrix: np.ndarray, tags=[]) -> QuadraticProgram:
 
     qp.minimize(linear=linear, quadratic=quadratic)
     return qp
-
-import numpy as np
-from scipy import stats
 
 def threshold_similarity_matrix(W: np.ndarray, method: str = "otsu") -> tuple[np.ndarray, float]:
     """
@@ -1251,7 +1256,7 @@ def loss_func_estimator(x, ansatz, hamiltonian, estimator, matrix, c, experiment
     node_exp_map = {}
     idx = 0
     for r in result:
-        for ev in r.data.evs:
+        for ev in np.atleast_1d(r.data.evs):
             node_exp_map[idx] = ev
             idx += 1
 
@@ -1298,10 +1303,10 @@ def generate_circuit(matrix: np.ndarray, pm) -> list:
 
     num_qubits = int(np.ceil((1 + np.sqrt(1 + (8 / 3) * num_nodes)) / 2))
 
-    list_size = num_nodes // 3
-    node_x = [i for i in range(list_size)]
-    node_y = [i for i in range(list_size, 2 * list_size)]
-    node_z = [i for i in range(2 * list_size, num_nodes)]
+    list_size = num_qubits * (num_qubits - 1) // 2
+    node_x = list(range(min(list_size, num_nodes)))
+    node_y = list(range(len(node_x), min(len(node_x) + list_size, num_nodes)))
+    node_z = list(range(len(node_x) + len(node_y), num_nodes))
 
     pauli_correlation_encoding_x = build_pauli_correlation_encoding(
         "X", node_x, num_qubits
@@ -1418,7 +1423,9 @@ def pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**k
             # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
             
             if n_graph_0[i-1] and n_graph_1[i-1]:
-                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))                
+            else:
+                ncuts.append(float('inf'))
                 
     
     # Get the cuts created by the minimum ncut value
