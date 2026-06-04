@@ -1395,43 +1395,47 @@ def pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**k
     var = int(np.floor(rows/2.0))+1
     pm = generate_preset_pass_manager(optimization_level=3,backend=AerSimulator())
     qc, pce = generate_circuit(sub_mat,pm)
-    while not ncuts:
-        
-        n_graph_0 = []
-        n_graph_1 = []
-        
-        # Run min_cut for each configuration
-        for i in range(1,var):
-            # print(f'Corte con {i}')
-            if 'timer' in kwargs:
-                start = time.time_ns()/1000000
-            # Prepare the expression and run the QRAO    
-            res = run_pce_min_cut(sub_mat,qc,pce,estimator,c=i)
-
-            result = res.x
-            minim = res.fun
-                    
-            # Time measurement
-            if 'timer' in kwargs:
-                end = time.time_ns()/1000000
-                kwargs['timer'].update(end-start)
                 
-            n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
-            n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
-            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+    n_graph_0 = []
+    n_graph_1 = []
+    
+    # Run min_cut for each configuration
+    for i in range(1,var):
+        # print(f'Corte con {i}')
+        if 'timer' in kwargs:
+            start = time.time_ns()/1000000
+        # Prepare the expression and run the QRAO    
+        res = run_pce_min_cut(sub_mat,qc,pce,estimator,c=i)
+
+        result = res.x
+        minim = res.fun
+                
+        # Time measurement
+        if 'timer' in kwargs:
+            end = time.time_ns()/1000000
+            kwargs['timer'].update(end-start)
             
-            # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
-            
-            if n_graph_0[i-1] and n_graph_1[i-1]:
-                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))                
-            else:
-                ncuts.append(float('inf'))
+        n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
+        n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
+        # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+        
+        # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+        
+        if n_graph_0[i-1] and n_graph_1[i-1]:
+            ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))                
+        else:
+            ncuts.append(np.inf)
                 
     
     # Get the cuts created by the minimum ncut value
     index = np.argmin(ncuts)
     # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
     
+    if ncuts[index] == np.inf:
+        # No valid cut, return a random partition
+        n_graph_0[index] = tags[:len(tags)//2]
+        n_graph_1[index] = tags[len(tags)//2:]
+        
     node = TreeNode(tags)
     
     # Recursivity in the first graph
