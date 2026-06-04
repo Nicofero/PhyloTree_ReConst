@@ -175,3 +175,7 @@ qa_big_trees_*.py
 # Benchmark data
 benchmarking matrices/
 benchmarking_results/*/
+
+# R data
+.RData
+.Rhistory
