@@ -1017,8 +1017,9 @@ def run_qrao_min_cut(
     tags: list = [],
     max_vars_per_qubit: int = 3,
     rounding: str = "magic",   # "magic" | "semideterministic"
-    shots: int = 10_000,
+    shots: int = 4096,
     seed: int = 42,
+    ansatz = "real_amplitudes" # real_amplitudes | efficientSU2
 ) -> dict:
     """
     Solve a min-cut problem with QRAO, post-processing the result
@@ -1032,6 +1033,7 @@ def run_qrao_min_cut(
         rounding:           "magic" (multiple samples) or "semideterministic".
         shots:              Number of magic rounding shots.
         seed:               RNG seed for reproducibility.
+        ansatz:            "real_amplitudes" or "efficientSU2" for VQE.
 
     Returns:
         dict with keys:
@@ -1066,8 +1068,11 @@ def run_qrao_min_cut(
                                 "max_parallel_experiments": 0,
                             }
                         }
-)
-    ansatz = real_amplitudes(encoding.num_qubits)
+                )
+    if ansatz == "real_amplitudes":
+        ansatz = real_amplitudes(encoding.num_qubits)
+    else:
+        ansatz = efficient_su2(encoding.num_qubits, reps=3)
     vqe = VQE(ansatz=ansatz, optimizer=COBYLA(maxiter=300), estimator=estimator, pass_manager= pm)
 
     # ── 4. Rounding scheme ─────────────────────────────────────────────────────
@@ -1115,7 +1120,7 @@ def run_qrao_min_cut(
 
 
 
-def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kwargs):
+def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),ansatz="efficientSU2",**kwargs):
     r"""
     Recursive function that uses QRAO to create the Phylogenetic tree using Ncut
     
@@ -1147,7 +1152,7 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
             if 'timer' in kwargs:
                 start = time.time_ns()/1000000
             # Prepare the expression and run the QRAO    
-            res = run_qrao_min_cut(sub_mat,c = i)
+            res = run_qrao_min_cut(sub_mat,c = i,ansatz=ansatz)
             
             result = [str(int(x)) for x in res['x']]
             minim = res['fval']
@@ -1176,9 +1181,9 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
     # Recursivity in the first graph
     if len(n_graph_0[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,timer=kwargs['timer']))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,timer=kwargs['timer'],ansatz=ansatz))
         else:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,ansatz=ansatz))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -1189,9 +1194,9 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),**kw
     # Recursivity in the first graph
     if len(n_graph_1[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,timer=kwargs['timer']))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,timer=kwargs['timer'],ansatz=ansatz))
         else:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,ansatz=ansatz))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:
@@ -1374,7 +1379,7 @@ def run_pce_min_cut(matrix: np.ndarray, qc: QuantumCircuit, pce: list, estimator
 
 def pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**kwargs):
     r"""
-    Recursive function that uses QRAO to create the Phylogenetic tree using Ncut
+    Recursive function that uses PCE to create the Phylogenetic tree using Ncut
     
     Args:
         `matrix`: The matrix defining the graph.
@@ -1404,7 +1409,7 @@ def pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**k
         # print(f'Corte con {i}')
         if 'timer' in kwargs:
             start = time.time_ns()/1000000
-        # Prepare the expression and run the QRAO    
+        # Prepare the expression and run the PCE    
         res = run_pce_min_cut(sub_mat,qc,pce,estimator,c=i)
 
         result = res.x
@@ -1457,6 +1462,104 @@ def pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**k
             node.children.append(pce_phylo_tree_qiskit(matrix,tags=n_graph_1[index],estimator=estimator,timer=kwargs['timer']))
         else:
             node.children.append(pce_phylo_tree_qiskit(matrix,tags=n_graph_1[index],estimator=estimator))
+    else:
+        leaf = TreeNode(n_graph_1[index])
+        if len(n_graph_1[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_1[index][0]]))
+            leaf.children.append(TreeNode([n_graph_1[index][1]]))
+        node.children.append(leaf)
+    
+    return node
+
+
+def sparse_pce_phylo_tree_qiskit(matrix:np.ndarray,tags=[],estimator=AerEstimator(),**kwargs):
+    r"""
+    Recursive function that uses PCE to create the Phylogenetic tree using Ncut after sparsifying the matrix
+    
+    Args:
+        `matrix`: The matrix defining the graph.
+        `tags`: Tags defining the names of the nodes, used for recursivity. **MUST BE AN INT LIST**
+    Returns:
+        The `TreeNode` containing the full tree. 
+    """
+    ncuts = []
+    
+    if not tags:
+        sub_mat = matrix
+        tags = list(range(matrix.shape[0]))
+    else:
+        sub_mat = matrix[np.ix_(tags, tags)]
+    
+    # Sparsification of the matrix
+    sub_mat,_ = threshold_similarity_matrix(sub_mat, method="zscore")
+        
+    rows = sub_mat.shape[0]
+    
+    var = int(np.floor(rows/2.0))+1
+    pm = generate_preset_pass_manager(optimization_level=3,backend=AerSimulator())
+    qc, pce = generate_circuit(sub_mat,pm)
+                
+    n_graph_0 = []
+    n_graph_1 = []
+    
+    # Run min_cut for each configuration
+    for i in range(1,var):
+        # print(f'Corte con {i}')
+        if 'timer' in kwargs:
+            start = time.time_ns()/1000000
+        # Prepare the expression and run the QRAO    
+        res = run_pce_min_cut(sub_mat,qc,pce,estimator,c=i)
+
+        result = res.x
+        minim = res.fun
+                
+        # Time measurement
+        if 'timer' in kwargs:
+            end = time.time_ns()/1000000
+            kwargs['timer'].update(end-start)
+            
+        n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
+        n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
+        # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+        
+        # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+        
+        if n_graph_0[i-1] and n_graph_1[i-1]:
+            ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))                
+        else:
+            ncuts.append(np.inf)
+                
+    
+    # Get the cuts created by the minimum ncut value
+    index = np.argmin(ncuts)
+    # print(f'Se selecciona la separacion: {n_graph_0[index]} | {n_graph_1[index]}')
+    
+    if ncuts[index] == np.inf:
+        # No valid cut, return a random partition
+        n_graph_0[index] = tags[:len(tags)//2]
+        n_graph_1[index] = tags[len(tags)//2:]
+        
+    node = TreeNode(tags)
+    
+    # Recursivity in the first graph
+    if len(n_graph_0[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(sparse_pce_phylo_tree_qiskit(matrix,tags=n_graph_0[index],estimator=estimator,timer=kwargs['timer']))
+        else:
+            node.children.append(sparse_pce_phylo_tree_qiskit(matrix,tags=n_graph_0[index],estimator=estimator,))
+    else:
+        leaf = TreeNode(n_graph_0[index])
+        if len(n_graph_0[index]) == 2:
+            leaf.children.append(TreeNode([n_graph_0[index][0]]))
+            leaf.children.append(TreeNode([n_graph_0[index][1]]))
+        node.children.append(leaf)
+        
+    # Recursivity in the first graph
+    if len(n_graph_1[index]) > 2:
+        if 'timer' in kwargs:
+            node.children.append(sparse_pce_phylo_tree_qiskit(matrix,tags=n_graph_1[index],estimator=estimator,timer=kwargs['timer']))
+        else:
+            node.children.append(sparse_pce_phylo_tree_qiskit(matrix,tags=n_graph_1[index],estimator=estimator))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:

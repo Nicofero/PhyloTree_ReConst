@@ -5,7 +5,8 @@ from argparse import ArgumentParser
 
 parser = ArgumentParser()
 parser.add_argument('-f',"--folder", type=str, help="Folder name containing the matrices")
-parser.add_argument('-m',"--method", type=str, choices=['qaoa','qrao','pce'], help="Method for the experiment")
+parser.add_argument('-m',"--method", type=str, choices=['qaoa','qrao','pce','sparse_pce', 'qrao_esu2'], help="Method for the experiment")
+# parser.add_argument('--ansatz', type=str, choices=['real_amplitudes', 'efficientSU2'], default='real_amplitudes', help="Ansatz for the QRAO method")
 args = parser.parse_args()
 
 folder = args.folder
@@ -17,7 +18,14 @@ if args.method == 'qaoa':
 elif args.method == 'qrao':    
     method_name = "nmcutqrao"
     timer_name = "timer_qrao"
-    
+
+elif args.method == 'sparse_pce':
+    method_name = "nmcutspce"
+    timer_name = "timer_spce"
+
+elif args.method == 'qrao_esu2':
+    method_name = "nmcutqrao_esu2"
+    timer_name = "timer_qrao_esu2"
 else:
     method_name = "nmcutpce"
     timer_name = "timer_pce"
@@ -44,7 +52,7 @@ for file in files:
     distance_matrix = np.loadtxt(f'./benchmarking matrices/{folder}/{file}')
     
     # For QAOA
-    if args.method in ['qaoa','qrao']:
+    if args.method in ['qaoa','qrao','qrao_esu2']:
         if distance_matrix.shape[0] <26:
             
             print(f'PROCESSING {file} of size {distance_matrix.shape[0]} for {folder}...\n')
@@ -77,10 +85,17 @@ for file in files:
         # tree_qa = qaoa_phylo_tree_qiskit(distance_matrix,timer=timer,layers=3,backend=backend)   # --For QAOA testing--
         if args.method == 'qaoa':
             tree_qa = qaoa_phylo_tree_qiskit(distance_matrix, timer=timer, layers = 3, backend=backend)
+
         elif args.method == 'qrao':
             tree_qa = qrao_phylo_tree_qiskit(distance_matrix, timer=timer)
-        else:
+
+        elif args.method == 'qrao_esu2':
+                tree_qa = qrao_phylo_tree_qiskit(distance_matrix, timer=timer, ansatz="efficientSU2")
+
+        elif args.method == 'pce':
             tree_qa = pce_phylo_tree_qiskit(distance_matrix, timer=timer, estimator= estimator)
+        else:
+            tree_qa = sparse_pce_phylo_tree_qiskit(distance_matrix, timer=timer, estimator= estimator)
 
         with open(f'./benchmarking_results/{folder}/{timer_name}_{folder}.csv','a') as fp:
             # fp.write(f'{distance_matrix.shape[0]},{file},NMcutQAOA,{timer.value}\n')
