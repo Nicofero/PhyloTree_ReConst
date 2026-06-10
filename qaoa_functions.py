@@ -1012,115 +1012,89 @@ def _best_with_cardinality(
 
 def run_qrao_min_cut(
     matrix: np.ndarray,
-    c: int,
-    sparsity_method = "zscore", # "zscore" | "otsu" | "knee" | "percentile"
+    c_max: int,
+    sparsity_method = "zscore",
     tags: list = [],
     max_vars_per_qubit: int = 3,
-    rounding: str = "magic",   # "magic" | "semideterministic"
+    rounding: str = "magic",
     shots: int = 4096,
     seed: int = 42,
-    ansatz = "real_amplitudes" # real_amplitudes | efficientSU2
+    ansatz = "real_amplitudes",
+    backend = AerSimulator(),
+    sampler = AerSampler(),
+    estimator = AerEstimator()
 ) -> dict:
     """
-    Solve a min-cut problem with QRAO, post-processing the result
-    to enforce exactly c variables equal to 1.
+    Solve a min-cut problem with QRAO for all cardinalities from 1 to c_max.
+    VQE is solved only once; post-processing is applied independently for each c.
 
     Args:
-        matrix:             NxN weight matrix (symmetric or lower-triangle).
-        c:                  Required number of selected assets (ones in solution).
-        tags:               Optional variable names; defaults to "0".."N-1".
-        max_vars_per_qubit: QRAC compression level (1, 2, or 3).
-        rounding:           "magic" (multiple samples) or "semideterministic".
-        shots:              Number of magic rounding shots.
-        seed:               RNG seed for reproducibility.
-        ansatz:            "real_amplitudes" or "efficientSU2" for VQE.
+        c_max: Maximum cardinality. Results are returned for every c in [1, c_max].
 
     Returns:
         dict with keys:
-            x                — binary solution array with exactly c ones
-            fval             — objective value at x
-            raw_result       — full QuantumRandomAccessOptimizationResult
+            results          — dict mapping c → {x, fval, feasible_found}
             num_qubits       — qubits used after compression
             compression_ratio
-            feasible_found   — whether any sample satisfied the constraint directly
+            raw_result       — full QuantumRandomAccessOptimizationResult
     """
-    # ── 1. Sparsify the matrix and build the QUBO ──────────────────────────────────────────────────────
-    W_sparse,thresh = threshold_similarity_matrix(matrix, method=sparsity_method)
-    
-    qp = min_cut_qp(W_sparse,tags)
+    # ── 1. Sparsify and build QUBO ─────────────────────────────────────────────
+    W_sparse, thresh = threshold_similarity_matrix(matrix, method=sparsity_method)
+    qp = min_cut_qp(W_sparse, tags)
 
     # ── 2. Encode ──────────────────────────────────────────────────────────────
     encoding = QuantumRandomAccessEncoding(max_vars_per_qubit=max_vars_per_qubit)
     encoding.encode(qp)
-    # print(
-    #     f"Encoding: {encoding.num_vars} variables → {encoding.num_qubits} qubits "
-    #     f"(compression {encoding.compression_ratio:.2f}x)"
-    # )
 
-    # ── 3. Solver (VQE) ────────────────────────────────────────────────────────
-    pm = generate_preset_pass_manager(optimization_level=3, backend=AerSimulator())
-    estimator = AerEstimator(
-                        options={
-                            "backend_options": {
-                                "method": "statevector",   # exact simulation — same as StatevectorEstimator
-                                "device": "CPU",           # swap to "GPU" if you have a CUDA-capable card
-                                "max_parallel_threads": 0, # 0 = use all available cores
-                                "max_parallel_experiments": 0,
-                            }
-                        }
-                )
+    # ── 3. Solver (VQE) — run once for all cardinalities ──────────────────────
+    pm = generate_preset_pass_manager(optimization_level=3, backend=backend)
     if ansatz == "real_amplitudes":
-        ansatz = real_amplitudes(encoding.num_qubits)
+        ansatz_circuit = real_amplitudes(encoding.num_qubits)
     else:
-        ansatz = efficient_su2(encoding.num_qubits, reps=3)
-    vqe = VQE(ansatz=ansatz, optimizer=COBYLA(maxiter=300), estimator=estimator, pass_manager= pm)
+        ansatz_circuit = efficient_su2(encoding.num_qubits, reps=3)
+    vqe = VQE(
+        ansatz=ansatz_circuit,
+        optimizer=COBYLA(maxiter=500),
+        estimator=estimator,
+        pass_manager=pm
+    )
 
     # ── 4. Rounding scheme ─────────────────────────────────────────────────────
     if rounding == "magic":
-        sampler = AerSampler(
-                    options={
-                        "backend_options": {
-                            "method": "statevector",
-                            "max_parallel_threads": 0, # 0 = use all available cores
-                            "max_parallel_experiments": 0,
-                        }
-                    }
-                )
         rounding_scheme = MagicRounding(sampler=sampler, pass_manager=pm)
     elif rounding == "semideterministic":
         rounding_scheme = SemideterministicRounding()
     else:
         raise ValueError(f"Unknown rounding '{rounding}'. Use 'magic' or 'semideterministic'.")
 
-    # ── 5. Solve ───────────────────────────────────────────────────────────────
+    # ── 5. Solve once ──────────────────────────────────────────────────────────
     qrao = QuantumRandomAccessOptimizer(
         min_eigen_solver=vqe,
         rounding_scheme=rounding_scheme,
     )
     raw_result = qrao.solve(qp)
 
-    # ── 6. Post-process: enforce exactly c ones ────────────────────────────────
-    feasible_found = any(int(s.x.sum()) == c for s in raw_result.samples)
-    x, fval = _best_with_cardinality(raw_result.samples, c, qp)
-
-    if not feasible_found:
-        print(
-            f"No sample had exactly {c} ones — "
-            f"projected best sample to cardinality {c}."
-        )
+    # ── 6. Post-process for every c in [1, c_max] ─────────────────────────────
+    results = {}
+    for c in range(1, c_max + 1):
+        feasible_found = any(int(s.x.sum()) == c for s in raw_result.samples)
+        x, fval = _best_with_cardinality(raw_result.samples, c, qp)
+        results[c] = {
+            "x":              x,
+            "fval":           fval,
+            "feasible_found": feasible_found,
+        }
 
     return {
-        "x":                  x,
-        "fval":               fval,
-        "raw_result":         raw_result,
+        "results":            results,
         "num_qubits":         encoding.num_qubits,
         "compression_ratio":  encoding.compression_ratio,
-        "feasible_found":     feasible_found,
+        "raw_result":         raw_result,
     }
 
 
 
-def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),ansatz="efficientSU2",**kwargs):
+def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),estimator=AerEstimator(), sampler= AerSampler(), ansatz="efficientSU2",**kwargs):
     r"""
     Recursive function that uses QRAO to create the Phylogenetic tree using Ncut
     
@@ -1140,27 +1114,27 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),ansa
         
     rows = sub_mat.shape[0]
     
-    var = int(np.floor(rows/2.0))+1
+    var = int(np.floor(rows/2.0))
     
     while not ncuts:
         
         n_graph_0 = []
         n_graph_1 = []
         # Run min_cut for each configuration
-        for i in range(1,var):
-            # print(f'Corte con {i}')
-            if 'timer' in kwargs:
-                start = time.time_ns()/1000000
-            # Prepare the expression and run the QRAO    
-            res = run_qrao_min_cut(sub_mat,c = i,ansatz=ansatz)
-            
+        # print(f'Corte con {i}')
+        if 'timer' in kwargs:
+            start = time.time_ns()/1000000
+        # Prepare the expression and run the QRAO    
+        output = run_qrao_min_cut(sub_mat,c_max=var,ansatz=ansatz, backend=backend,estimator=estimator,sampler=sampler)
+        
+        if 'timer' in kwargs:
+            end = time.time_ns()/1000000
+            kwargs['timer'].update(end-start)
+        
+        for c,res in output['results'].items():            
+        
             result = [str(int(x)) for x in res['x']]
-            minim = res['fval']
-                    
-            # Time measurement
-            if 'timer' in kwargs:
-                end = time.time_ns()/1000000
-                kwargs['timer'].update(end-start)
+            minim = res['fval']                
                 
             n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
             n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
@@ -1168,8 +1142,8 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),ansa
             
             # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
             
-            if n_graph_0[i-1] and n_graph_1[i-1]:
-                ncuts.append(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            if n_graph_0[c-1] and n_graph_1[c-1]:
+                ncuts.append(n_cut(minim,n_graph_0[c-1],n_graph_1[c-1],matrix))
                 
     
     # Get the cuts created by the minimum ncut value
@@ -1181,9 +1155,9 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),ansa
     # Recursivity in the first graph
     if len(n_graph_0[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,timer=kwargs['timer'],ansatz=ansatz))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,estimator=estimator,sampler = sampler,timer=kwargs['timer'],ansatz=ansatz))
         else:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,ansatz=ansatz))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_0[index],backend=backend,estimator=estimator,sampler=sampler,ansatz=ansatz))
     else:
         leaf = TreeNode(n_graph_0[index])
         if len(n_graph_0[index]) == 2:
@@ -1194,9 +1168,9 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),ansa
     # Recursivity in the first graph
     if len(n_graph_1[index]) > 2:
         if 'timer' in kwargs:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,timer=kwargs['timer'],ansatz=ansatz))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,estimator=estimator,sampler=sampler,timer=kwargs['timer'],ansatz=ansatz))
         else:
-            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,ansatz=ansatz))
+            node.children.append(qrao_phylo_tree_qiskit(matrix,tags=n_graph_1[index],backend=backend,estimator=estimator,sampler=sampler,ansatz=ansatz))
     else:
         leaf = TreeNode(n_graph_1[index])
         if len(n_graph_1[index]) == 2:

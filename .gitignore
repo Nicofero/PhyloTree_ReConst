@@ -171,6 +171,7 @@ token.txt
 *.sh
 outputs
 qa_big_trees_*.py
+qrao_big_trees_*.py
 
 # Benchmark data
 benchmarking matrices/
