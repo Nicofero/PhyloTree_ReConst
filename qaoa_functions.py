@@ -1013,7 +1013,7 @@ def _best_with_cardinality(
 def run_qrao_min_cut(
     matrix: np.ndarray,
     c_max: int,
-    sparsity_method = "zscore",
+    sparsity_method = "percentile",
     tags: list = [],
     max_vars_per_qubit: int = 3,
     rounding: str = "magic",
@@ -1046,22 +1046,28 @@ def run_qrao_min_cut(
     encoding = QuantumRandomAccessEncoding(max_vars_per_qubit=max_vars_per_qubit)
     encoding.encode(qp)
 
+    print(f'Number of qubits: {encoding.num_qubits}')
+
     # ── 3. Solver (VQE) — run once for all cardinalities ──────────────────────
-    pm = generate_preset_pass_manager(optimization_level=3, backend=backend)
+    pm = generate_preset_pass_manager(optimization_level=1, backend=backend)
     if ansatz == "real_amplitudes":
         ansatz_circuit = real_amplitudes(encoding.num_qubits)
     else:
         ansatz_circuit = efficient_su2(encoding.num_qubits, reps=3)
+    def vqe_callback(eval_count, parameters, mean, std):
+        value = float(list(mean.values())[0]) if isinstance(mean, dict) else float(mean)
+        print(f"Iter {eval_count:4d} | Energy: {value:.6f}")
     vqe = VQE(
         ansatz=ansatz_circuit,
-        optimizer=COBYLA(maxiter=500),
+        optimizer=COBYLA(maxiter=200),
         estimator=estimator,
-        pass_manager=pm
+        pass_manager=pm,
+        callback=vqe_callback
     )
 
     # ── 4. Rounding scheme ─────────────────────────────────────────────────────
     if rounding == "magic":
-        rounding_scheme = MagicRounding(sampler=sampler, pass_manager=pm)
+        rounding_scheme = MagicRounding(sampler=sampler,pass_manager=pm)
     elif rounding == "semideterministic":
         rounding_scheme = SemideterministicRounding()
     else:
@@ -1077,6 +1083,7 @@ def run_qrao_min_cut(
     # ── 6. Post-process for every c in [1, c_max] ─────────────────────────────
     results = {}
     for c in range(1, c_max + 1):
+        print(f'c={c}')
         feasible_found = any(int(s.x.sum()) == c for s in raw_result.samples)
         x, fval = _best_with_cardinality(raw_result.samples, c, qp)
         results[c] = {
@@ -1138,9 +1145,9 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),esti
                 
             n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
             n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
-            # print(f'\tLa division es: {n_graph_0[i-1]} | {n_graph_1[i-1]}')
+            print(f'\tLa division es: {n_graph_0[c-1]} | {n_graph_1[c-1]}')
             
-            # print(n_cut(minim,n_graph_0[i-1],n_graph_1[i-1],matrix))
+            # print(n_cut(minim,n_graph_0[c-1],n_graph_1[c-1],matrix))
             
             if n_graph_0[c-1] and n_graph_1[c-1]:
                 ncuts.append(n_cut(minim,n_graph_0[c-1],n_graph_1[c-1],matrix))
