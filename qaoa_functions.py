@@ -1062,7 +1062,7 @@ def run_qrao_min_cut(
         optimizer=COBYLA(maxiter=200),
         estimator=estimator,
         pass_manager=pm,
-        callback=vqe_callback
+        # callback=vqe_callback
     )
 
     # ── 4. Rounding scheme ─────────────────────────────────────────────────────
@@ -1132,7 +1132,7 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),esti
         if 'timer' in kwargs:
             start = time.time_ns()/1000000
         # Prepare the expression and run the QRAO    
-        output = run_qrao_min_cut(sub_mat,c_max=var,ansatz=ansatz, backend=backend,estimator=estimator,sampler=sampler)
+        output = run_qrao_min_cut(sub_mat,c_max=var,ansatz=ansatz, backend=backend,estimator=estimator,sampler=sampler,rounding='semideterministic')
         
         if 'timer' in kwargs:
             end = time.time_ns()/1000000
@@ -1145,7 +1145,7 @@ def qrao_phylo_tree_qiskit(matrix:np.ndarray,tags=[],backend=AerSimulator(),esti
                 
             n_graph_0.append([tags[j] for j in range(len(result)) if result[j]=='0'])
             n_graph_1.append([tags[j] for j in range(len(result)) if result[j]=='1'])        
-            print(f'\tLa division es: {n_graph_0[c-1]} | {n_graph_1[c-1]}')
+            # print(f'\tLa division es: {n_graph_0[c-1]} | {n_graph_1[c-1]}')
             
             # print(n_cut(minim,n_graph_0[c-1],n_graph_1[c-1],matrix))
             
